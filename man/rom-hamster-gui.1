@@ -1,0 +1,43 @@
+.TH ROM-HAMSTER-GUI 1 "2026-11-11" "rom-hamster 0.1.0" "User Commands"
+.SH NAME
+rom-hamster-gui \- 复古游戏 ROM 库管理器（GTK 4 图形前端）
+.SH SYNOPSIS
+.B rom-hamster-gui
+[\fIROM_ROOT\fR]
+.SH DESCRIPTION
+.B rom-hamster-gui
+是
+.BR rom-hamster (1)
+的图形前端，与命令行前端共享同一个核心库
+libromham\-1\.0\.so，因此平台规则、库结构与检索行为完全一致，不存在两套逻辑。
+.PP
+首次运行且没有库文件时，程序会先要求选择 ROM 根目录，然后在该目录下建立
+romhamster.db；已有库则直接进入主窗口。
+.PP
+核心库不链接 GTK：图形前端只负责呈现与交互，一切存储与规则判定都通过
+libromham 完成。
+.SH OPTIONS
+.PP
+不接受命令行选项。README 中给出的 ROM 根目录以配置键
+\fIROM_ROOT\fR 为准，可通过
+.B rom-hamster config
+查看与覆盖。
+.SH ENVIRONMENT
+.TP
+.B RH_SMOKE_TEST
+设为 1 时，窗口映射成功后立即退出（外部验收脚本用；正常使用不要设置）。
+.TP
+.B GSK_RENDERER
+GTK 4 的渲染后端。无 GPU 的环境（容器、xvfb）应设为
+.BR cairo 。
+.SH FILES
+.TP
+.I ~/.config/rom-hamster/rom-hamster.conf
+用户配置。
+.TP
+.I /usr/share/rom-hamster/platforms.conf
+出厂平台规则（只读）。
+.SH SEE ALSO
+.BR rom-hamster (1)
+.SH AUTHORS
+Zhou Xin <zhouxin312@qq.com>

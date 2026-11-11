@@ -1,0 +1,31 @@
+#!/usr/bin/make -f
+# debian/rules — 唯一绕不开的 Makefile（Debian 规矩），实际构建交给 Meson + Ninja
+#
+# 关键取舍：
+#   -Dtests=false      打包时不编译单测（单测在开发机上由 meson test 跑，
+#                      进 Debian 构建只会拖时间且依赖测试夹具）
+#   --libdir 用 multiarch 三元组目录，与 §9.1 的私有目录拼接后为
+#   /usr/lib/<triplet>/rom-hamster/libromham-1.0.so
+#   --sysconfdir=/etc  确保 conffile 落在 /etc，而不是 /usr/etc
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+%:
+	dh $@ --buildsystem=meson
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--buildtype=release \
+		-Dgui=true \
+		-Dtests=false \
+		--sysconfdir=/etc \
+		--libdir=lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+# libromham 装在 /usr/lib/<triplet>/rom-hamster 私有目录，不进 ldconfig 缓存，
+# 也不对外发布 shlibs，因此不需要 dh_makeshlibs 生成的 ldconfig trigger。
+override_dh_makeshlibs:
+
+# 单测依赖源码树里的 data/ 与临时目录，不适合在打包环境跑；
+# 单元测试在开发机上由 tools/m1-check.sh 执行。
+override_dh_auto_test:

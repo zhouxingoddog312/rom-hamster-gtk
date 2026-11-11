@@ -10,8 +10,9 @@
 
 ## 当前状态
 
-**M0 骨架已完成**（2026-11-11）：核心库 + 两个前端可构建，配置五层与 schema v1 已落地，
-M0 八项验收全部通过。验收明细见 `docs/m0-verification.md`，一键复跑 `tools/m0-check.sh`。
+**M1 存储与规则已完成**（2026-11-11）：`store_*` 全量 API、`platforms.conf` 五段规则
+编译、三包 deb 布局与首个可安装 deb 均已落地，验收 14/14 通过。
+验收明细见 `docs/m1-verification.md`，一键复跑 `tools/m1-check.sh`。
 
 里程碑进度见 `ARCHITECTURE.md` §14：M1 存储与规则（含首个可安装 deb）→ M2 导入 →
 M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
@@ -23,6 +24,7 @@ M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
 | `ARCHITECTURE.md` | 架构与依赖说明（v0.2，逐板块过审后的基线）。查议题请先看文首 §0 决策索引 |
 | `docs/rules-verification.md` | `platforms.conf` 与 `frontends/*.conf` 的一手来源、修正清单、刻意不采纳项、存疑项 |
 | `docs/m0-verification.md` | M0 验收记录：环境、结果、与文档的偏差 |
+| `docs/m1-verification.md` | M1 验收记录：14 项证据、与 `ARCHITECTURE.md` 的 6 处偏差及理由、修掉的 8 个真实缺陷 |
 | `data/platforms.conf` | 101 个平台规则（5 段：扩展名/街机后缀/媒体目录/媒体后缀/归档后缀） |
 | `data/frontends/es.conf` | EmulationStation（RetroPie）导入 + 导出规格 |
 | `data/frontends/es-de.conf` | ES-DE 导入 + 导出规格 |
@@ -52,9 +54,23 @@ meson test -C build
 meson setup build-nogui -Dgui=false
 ninja -C build-nogui
 
-# M0 全部验收项
-tools/m0-check.sh
+# M1 全部验收项（含 deb 构建与安装，需 root 才能跑安装段）
+tools/m1-check.sh
+
+# 只跑源码与单测，不构建 deb
+SKIP_DEB=1 tools/m1-check.sh
 ```
+
+打包（产出三个 deb，落在 `dist/`）：
+
+```sh
+dpkg-buildpackage -us -uc -b
+# rom-hamster_0.1.0_amd64.deb / rom-hamster-gui_0.1.0_amd64.deb / rom-hamster-data_0.1.0_all.deb
+sudo dpkg -i dist/*.deb
+```
+
+`debian/rules` 是 Debian 强制要求的 make 入口，内部只调 `dh --buildsystem=meson`；
+工程本身仍是 Meson + Ninja，没有自维护 Makefile。
 
 依赖安装（Debian/Ubuntu）：
 
@@ -66,4 +82,4 @@ sudo apt install build-essential meson ninja-build pkg-config \
 
 ## 许可
 
-待定（1.0.0 的许可与维护者信息以最终发布为准）。
+GPL-3.0-or-later。维护者：Zhou Xin <zhouxin312@qq.com>。

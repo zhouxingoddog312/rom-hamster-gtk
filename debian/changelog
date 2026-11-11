@@ -1,0 +1,16 @@
+rom-hamster (0.1.0) unstable; urgency=medium
+
+  * M1: storage and rules milestone.
+  * store_*: full game/ROM/media/tag/DAT/job API on SQLite schema v1,
+    transactional writes, cascading deletes, FTS5 keyword search with
+    LIKE fallback when the trigram tokenizer is unavailable.
+  * platform.c: compile platforms.conf into pre-built structures
+    (101 platforms plus the arcade suffix, media directory, media suffix
+    and archive extension sections); ambiguous extensions are reported
+    as a candidate set instead of being silently resolved.
+  * Packaging: three binary packages (rom-hamster, rom-hamster-gui,
+    rom-hamster-data), conffiles under /etc/rom-hamster, private library
+    directory /usr/lib/<triplet>/rom-hamster with rpath on both binaries,
+    manual page for the command line front-end.
+
+ -- Zhou Xin <zhouxin312@qq.com>  Wed, 11 Nov 2026 12:00:00 +0800

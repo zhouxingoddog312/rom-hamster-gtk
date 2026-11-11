@@ -1,0 +1,56 @@
+Source: rom-hamster
+Section: utils
+Priority: optional
+Maintainer: Zhou Xin <zhouxin312@qq.com>
+Build-Depends: debhelper-compat (= 13),
+               meson (>= 0.61),
+               ninja-build,
+               pkg-config,
+               libglib2.0-dev,
+               libsqlite3-dev,
+               libarchive-dev,
+               libxml2-dev,
+               zlib1g-dev,
+               libgtk-4-dev
+Standards-Version: 4.6.1
+Homepage: https://gitee.com/goddog312/rom-hamster-gtk
+Rules-Requires-Root: no
+
+Package: rom-hamster
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: rom-hamster-gui
+Description: retro game ROM library manager (command line)
+ rom-hamster manages a retro game ROM library: platform detection from file
+ extensions, two-phase import, SQLite-backed metadata, search and filtering,
+ DAT verification, and export to front-end metadata formats (EmulationStation,
+ ES-DE, Pegasus).
+ .
+ This package contains the command line front-end, the shared core library
+ libromham-1.0.so, the system-wide configuration files and the manual page.
+
+Package: rom-hamster-gui
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, rom-hamster (= ${binary:Version})
+Recommends: gstreamer1.0-plugins-base,
+            gstreamer1.0-plugins-good,
+            gstreamer1.0-plugins-bad,
+            gstreamer1.0-libav
+Description: retro game ROM library manager (GTK 4 graphical front-end)
+ Graphical front-end for rom-hamster. It provides a list view of the library,
+ a detail page showing metadata and media (covers, screenshots, videos,
+ marquees), import progress with cancellation, and launching a game with the
+ configured emulator.
+ .
+ It links against the same core library as the command line front-end and
+ does not duplicate any storage or rule logic.
+
+Package: rom-hamster-data
+Architecture: all
+Depends: ${misc:Depends}
+Description: platform and front-end rules for rom-hamster
+ Ships the read-only factory data used by rom-hamster: the platform rules
+ database (extensions, arcade ROM suffixes, media directories and media
+ suffixes, archive extensions), the front-end import/export specifications for
+ EmulationStation, ES-DE and Pegasus, and the annotated configuration
+ template.

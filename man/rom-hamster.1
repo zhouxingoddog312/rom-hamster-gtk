@@ -1,0 +1,55 @@
+.TH ROM-HAMSTER 1 "2026-11-11" "rom-hamster 0.1.0" "User Commands"
+.SH NAME
+rom-hamster \- 复古游戏 ROM 库管理器（命令行前端）
+.SH SYNOPSIS
+.B rom-hamster
+[\fB\-\-version\fR]
+.br
+.B rom-hamster
+.B config
+[\fB\-\-explain\fR \fIKEY\fR | \fB\-\-list\fR]
+.SH DESCRIPTION
+.B rom-hamster
+管理一个复古游戏 ROM 库：平台判定、导入、检索、导出到前端清单（ES、ES\-DE、
+Pegasus），并支持 DAT 校验。库本身是一个 SQLite 文件，默认位于
+\fIROM_ROOT\fR/romhamster.db。
+.PP
+图形界面是同包提供的
+.B rom-hamster-gui
+（独立包 rom-hamster-gui），两者共享核心库 libromham\-1.0.so。
+.PP
+当前版本（0.1.0，里程碑 M1）实现了配置系统与存储层；其余子命令在后续里程碑
+逐个加入，尚未实现时调用会给出明确报错，不会静默成功。
+.SH OPTIONS
+.TP
+.B \-\-version
+打印版本、维护者、主页、许可与库 schema 版本。
+.TP
+.B config \-\-explain \fIKEY\fR
+打印该配置键的最终取值、来自哪个文件的第几行、以及它覆盖掉的上一层取值。
+.TP
+.B config \-\-list
+列出全部已知配置键及其最终取值与来源层。
+.SH FILES
+.TP
+.I /usr/share/rom-hamster/platforms.conf
+出厂平台规则（只读，随 rom-hamster-data 包分发）。
+.TP
+.I /etc/rom-hamster/platforms.conf
+系统管理员覆盖层（conffile）。
+.TP
+.I /etc/rom-hamster/rom-hamster.conf
+系统配置覆盖层（conffile）。
+.TP
+.I ~/.config/rom-hamster/rom-hamster.conf
+用户配置。
+.TP
+.I ~/.config/rom-hamster/platforms.conf
+用户平台规则增补。
+.TP
+.I ~/.cache/rom-hamster/
+缓存目录（缩略图等）。
+.SH SEE ALSO
+.BR rom-hamster-gui (1)
+.SH AUTHORS
+Zhou Xin <zhouxin312@qq.com>

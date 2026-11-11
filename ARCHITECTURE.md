@@ -101,7 +101,7 @@ c与gtk/
 ├─ README.md
 ├─ ARCHITECTURE.md            # 本文
 ├─ data/
-│  ├─ platforms.conf          # 100 平台规则，格式原样继承
+│  ├─ platforms.conf          # 101 平台规则，格式原样继承
 │  ├─ emulators.conf          # 新增：模拟器启动命令模板
 │  ├─ frontends/
 │  │  ├─ es.conf              # 每份"前端规格"同时描述导入与导出：
@@ -377,6 +377,7 @@ CREATE VIRTUAL TABLE games_fts USING fts5(
 - 不带 `_F`、`_F` 这类"操作当前记录全局数组"的隐式语义 —— 1.0.0 的 `fget/fset` 模式在 C 里对应显式结构体 `RhGame`。
 - 批量写用事务：`store_tx_begin()` / `store_tx_commit()` / `store_tx_rollback()`。
 - 只读查询返回 `GPtrArray<RhGame*>` 或游标，所有权明确写入注释。
+- **出参所有权（M1 起统一）**：所有 `**out` 出参由函数分配、调用方释放 —— 结构体用 `rh_*_free`，数组用 `g_ptr_array_unref`（数组自带元素的 `free_func`）。不再要求调用方预置结构体；这一处与 1.0.0 的 `_F` 取址风格有意不同，理由见 `docs/m1-verification.md`。
 
 ```c
 /* 生命周期 */
@@ -390,36 +391,53 @@ RhErr store_tx_commit(RhCtx *ctx);
 RhErr store_tx_rollback(RhCtx *ctx);
 
 /* 游戏记录 */
-RhErr store_game_get(RhCtx *, const char *id, RhGame *out);
-RhErr store_game_upsert(RhCtx *, const RhGame *g);
-RhErr store_game_delete(RhCtx *, const char *id);
-RhErr store_game_list(RhCtx *, const RhFilter *f, GPtrArray **out);
-int   store_game_count(RhCtx *);
+RhErr store_game_get(RhCtx *ctx, const char *id, RhGame **out);
+RhErr store_game_upsert(RhCtx *ctx, const RhGame *g);
+RhErr store_game_delete(RhCtx *ctx, const char *id);
+RhErr store_game_list(RhCtx *ctx, const RhFilter *f, GPtrArray **out);
+RhErr store_game_count(RhCtx *ctx, gint64 *out);
 
 /* 子表 */
-RhErr store_rom_add(RhCtx *, const char *game_id, const RhRomFile *r);
-RhErr store_rom_remove(RhCtx *, const char *game_id, const char *filename);
-RhErr store_rom_list(RhCtx *, const char *game_id, GPtrArray **out);
-RhErr store_media_add(RhCtx *, const char *game_id, const char *kind, const char *filename);
-RhErr store_media_remove(RhCtx *, const char *game_id, const char *kind, const char *filename);
-RhErr store_media_list(RhCtx *, const char *game_id, const char *kind, GPtrArray **out);
+RhErr store_rom_add(RhCtx *ctx, const char *game_id, const RhRomFile *r);
+RhErr store_rom_remove(RhCtx *ctx, const char *game_id, const char *filename);
+RhErr store_rom_list(RhCtx *ctx, const char *game_id, GPtrArray **out);
+RhErr store_media_add(RhCtx *ctx, const char *game_id, const char *kind,
+                      const char *filename);
+RhErr store_media_add_sized(RhCtx *ctx, const char *game_id, const char *kind,
+                            const char *filename, gint64 size, int seq);
+RhErr store_media_remove(RhCtx *ctx, const char *game_id, const char *kind,
+                         const char *filename);
+RhErr store_media_list(RhCtx *ctx, const char *game_id, const char *kind,
+                       GPtrArray **out);
+RhErr store_media_total_size(RhCtx *ctx, const char *game_id, gint64 *out);
 
 /* 标签 */
-RhErr store_tags_set(RhCtx *, const char *game_id, char **tags, int n);
-RhErr store_tag_list(RhCtx *, GPtrArray **out);    /* 供筛选下拉用 */
+RhErr store_tags_set(RhCtx *ctx, const char *game_id, const char **tags, int n);
+RhErr store_tag_list(RhCtx *ctx, GPtrArray **out);    /* 供筛选下拉用 */
+RhErr store_game_tags(RhCtx *ctx, const char *game_id, GPtrArray **out);
 
-/* DAT */
-RhErr store_dat_import_file(RhCtx *, const char *platform, const char *path);
-RhErr store_dat_find_by_hash(RhCtx *, const char *algo,
+/* DAT：XML 解析归 dat.c（§5.1 边界表），store 只负责落库 */
+RhErr store_dat_begin(RhCtx *ctx, const char *platform, const char *path,
+                      const char *name, const char *version, gint64 *dat_id);
+RhErr store_dat_entries_add(RhCtx *ctx, gint64 dat_id, GPtrArray *entries);
+RhErr store_dat_finish(RhCtx *ctx, gint64 dat_id, gint64 entry_count);
+RhErr store_dat_count(RhCtx *ctx, gint64 *out);
+RhErr store_dat_find_by_hash(RhCtx *ctx, const char *algo,
                              const char *hash, GPtrArray **out);
 
 /* 作业 */
-RhErr store_job_create(RhCtx *, const char *kind, int total, int64_t *job_id);
-RhErr store_job_update(RhCtx *, int64_t job_id, const char *state, int done, const char *err);
-RhErr store_job_list_unfinished(RhCtx *, GPtrArray **out);
+RhErr store_job_create(RhCtx *ctx, const char *kind, int total, gint64 *job_id);
+RhErr store_job_update(RhCtx *ctx, gint64 job_id, const char *state, int done,
+                       const char *err);
+RhErr store_job_get(RhCtx *ctx, gint64 job_id, RhJob **out);
+RhErr store_job_list_unfinished(RhCtx *ctx, GPtrArray **out);
+RhErr store_job_item_add(RhCtx *ctx, RhJobItem *it);
+RhErr store_job_item_update(RhCtx *ctx, gint64 job_id, int seq,
+                            const char *state, const char *err);
+RhErr store_job_items_list(RhCtx *ctx, gint64 job_id, GPtrArray **out);
 
 /* 检索 */
-RhErr store_search_fts(RhCtx *, const char *kw, GPtrArray **out);
+RhErr store_search_fts(RhCtx *ctx, const char *kw, GPtrArray **out);
 ```
 
 `RhFilter` 与 1.0.0 的 `cmd_list` 参数一一对应：
@@ -996,7 +1014,7 @@ ROM_ROOT = /home/zhoux/roms
 | 阶段 | 交付物 | 验收 |
 |---|---|---|
 | **M0 骨架** | `meson.build`、`RhCtx`/`RhErr`、`rh-config` 五层加载、`store_open`+v1 schema+迁移、`rom-hamster --version`、`rom-hamster-gui` 空窗口 | 三组构建通过（`-Dgui=true` / `-Dgui=false` / asan+ubsan）；`ldd libromham.so` 中不含 `gtk`/`gdk`/`pango`；两个二进制都能启动 |
-| **M1 存储与规则** | `store_*` 全量、`RhGame`/`RhFilter`、`platform.c` 解析 100 平台、`debian/` 打包骨架 + **首个可安装 deb** | 100 个平台、5 段规则全部解析成功且媒体类型识别有单测；`store_*` 的 CRUD、`dir_path` UNIQUE、级联删除有测试；`dpkg -i` 后 `rom-hamster --version` 可运行；`lintian` 无 error |
+| **M1 存储与规则** | `store_*` 全量、`RhGame`/`RhFilter`、`platform.c` 解析 101 平台、`debian/` 打包骨架 + **首个可安装 deb** | 101 个平台、5 段规则全部解析成功且媒体类型识别有单测；`store_*` 的 CRUD、`dir_path` UNIQUE、级联删除有测试；`dpkg -i` 后 `rom-hamster --version` 可运行；`lintian` 无 error |
 | **M2 导入** | `classify`、`archive`（libarchive）、`job` 作业线程、`dat` 索引、`library` 整库、`import` 编排 | fixtures 的 5 类压缩包（zip/7z/rar/单 ROM/混合）+ PSV 特征包 + 二义扩展名 + 多碟 CD 全部落到正确目录；`kill -9` 后重启能续做且库里无半个条目；该阶段 deb 仍可安装 |
 | **M3 检索/管理/导出** | `query`、`detail`（CLI 纯文本）、`manage`、`export` 模板引擎 + 三份前端规格 | 13 维筛选 + 4 排序键结果与直接 SQL 对齐；导出的 ES-DE / Pegasus 清单能被对应前端正常读取；golden file 逐字节 diff 通过；故意写错的模板在**加载期**报出文件名与行号 |
 | **M4 GUI** | `ui-gtk`、主窗口 `GtkColumnView`、详情页 8 类媒体分页、导入进度/取消、启动游戏、首次运行引导、拖拽导入 | 见下方 §14.1 量化指标；空配置首启能走完"选目录 → 建库 → 主窗口"；拖入目录触发导入并有可见进度；无媒体后端时视频降级为外部打开并提示 |
@@ -1026,7 +1044,7 @@ CI 能自动化的只有「首屏渲染」与「内存增长」两项（xvfb 下
 
 - 元数据库：`ROM_ROOT/romhamsterdb.csv`，28 字段，RFC4180；内存整表 `DB_ALL[id]=base64(US分隔)`；`db_flush` 原子重写全表
 - 游戏目录：`<平台>/<目录>/{rom,covers,screenshots,videos,marquees,miximages,intro,patcher}`
-- 平台规则：`platforms.conf` 100 平台 / 5 段（`platform_extensions`、`arcade_rom_suffixes`、`media_type_dirs`、`media_suffix_rules`、`archive_extensions`）
+- 平台规则：`platforms.conf` 101 平台 / 5 段（`platform_extensions`、`arcade_rom_suffixes`、`media_type_dirs`、`media_suffix_rules`、`archive_extensions`）
 - 命令：`menu/init/import/list/search/show/edit/delete/export/stats/config/help/version`，`--gui` 走 zenity
 - 筛选：13 个维度（platform/genre/developer/publisher/year/region/tag/multi/status/has-patch/patch-type/format/kw）+ 4 个排序键（name/rating/year/discs）+ `--dir asc|desc`
 - 导出前端：`es` / `esde` / `pegasus`

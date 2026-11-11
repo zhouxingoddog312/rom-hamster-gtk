@@ -7,6 +7,18 @@ builddir/
 *.a
 subprojects/
 
+# 打包产物（由 tools/m1-check.sh 或 dpkg-buildpackage 生成）
+dist/
+obj-*/
+debian/tmp/
+debian/rom-hamster/
+debian/rom-hamster-gui/
+debian/rom-hamster-data/
+debian/.debhelper/
+debian/files
+debian/debhelper-build-stamp
+debian/*.debhelper
+
 # 临时调研下载（不入库，结论已写进 docs/rules-verification.md）
 _research/
 
