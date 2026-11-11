@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "rh-dirs.h"
+#include "rh-fs.h"
 
 struct RhConfig {
   GHashTable *values;   /* key -> RhConfigValue* */
@@ -302,4 +303,64 @@ gchar **rh_config_keys(RhConfig *c, guint *n_out)
   if (n_out)
     *n_out = n;
   return out;
+}
+
+RhErr rh_config_save_user_key(const char *key, const char *value)
+{
+  RhErr e = rh_ok();
+  gchar *path = rh_config_user_path();
+  gchar *old = NULL;
+  GString *out = g_string_new(NULL);
+  gchar **lines = NULL;
+  gboolean replaced = FALSE;
+
+  if (!key || !*key || !value)
+    return rh_fail(RH_ERR_CONFIG, "config: empty key");
+
+  if (!g_file_get_contents(path, &old, NULL, NULL))
+    old = g_strdup("");
+
+  lines = g_strsplit(old, "\n", -1);
+  for (int i = 0; lines[i]; i++) {
+    gchar *line = lines[i];
+    gchar *orig = g_strdup(line);
+    gchar *trim = g_strstrip(line);
+    if (!replaced && *trim && *trim != '#' && *trim != ';') {
+      gchar *eq = strchr(trim, '=');
+      if (eq) {
+        gchar *k = g_strndup(trim, (gsize)(eq - trim));
+        gchar *kt = g_strstrip(k);
+        if (g_strcmp0(kt, key) == 0) {
+          g_string_append_printf(out, "%s=%s\n", key, value);
+          replaced = TRUE;
+        } else {
+          g_string_append_printf(out, "%s\n", orig);
+        }
+        g_free(k);
+        g_free(orig);
+        continue;
+      }
+    }
+    g_string_append_printf(out, "%s\n", orig);
+    g_free(orig);
+  }
+  g_strfreev(lines);
+
+  if (!replaced)
+    g_string_append_printf(out, "%s=%s\n", key, value);
+  if (out->len && out->str[out->len - 1] == '\n')
+    g_string_truncate(out, out->len - 1);
+
+  {
+    gchar *dir = g_path_get_dirname(path);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+  }
+  if (rh_fs_write_text_atomic(path, out->str, &e) != 0)
+    e = rh_fail(RH_ERR_IO, "config: cannot write %s", path);
+
+  g_string_free(out, TRUE);
+  g_free(old);
+  g_free(path);
+  return e;
 }

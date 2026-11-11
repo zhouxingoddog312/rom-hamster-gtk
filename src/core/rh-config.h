@@ -67,3 +67,7 @@ const char *rh_layer_name(RhLayer layer);
 const char *rh_config_factory_path(void);
 const char *rh_config_system_path(void);
 gchar      *rh_config_user_path(void);
+
+/* 把单个键写回用户配置文件：存在则原位替换，不存在则追加；其他行保持不动。
+ * 供 GUI 首次运行时保存 ROM_ROOT，不覆盖用户已有的配置。 */
+RhErr       rh_config_save_user_key(const char *key, const char *value);

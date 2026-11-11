@@ -117,6 +117,34 @@ static void cleanup_tmpdir(void)
   g_free(tmpdir);
 }
 
+
+/* GUI 首次运行保存 ROM_ROOT：替换已有键、保留其他行与注释 */
+static void test_save_user_key(void)
+{
+  gchar *dir = g_build_filename(tmpdir, "rom-hamster", NULL);
+  gchar *path = g_build_filename(dir, "rom-hamster.conf", NULL);
+  gchar *body;
+  RhErr e;
+
+  g_mkdir_with_parents(dir, 0755);
+  g_assert_true(g_file_set_contents(path, "dat_dir=/roms/dat\n"
+                                          "ROM_ROOT = /old\n"
+                                          "# keep me\n", -1, NULL));
+
+  e = rh_config_save_user_key("ROM_ROOT", "/new/root");
+  g_assert_true(rh_err_ok(&e));
+  g_assert_true(g_file_get_contents(path, &body, NULL, NULL));
+  g_assert_nonnull(strstr(body, "dat_dir=/roms/dat"));
+  g_assert_nonnull(strstr(body, "ROM_ROOT=/new/root"));
+  g_assert_null(strstr(body, "/old"));
+  g_assert_nonnull(strstr(body, "# keep me"));
+  g_assert_cmpint(g_strv_length(g_strsplit(body, "ROM_ROOT=", -1)), ==, 2);
+
+  g_free(body);
+  g_free(path);
+  g_free(dir);
+}
+
 int main(int argc, char **argv)
 {
   int rc;
@@ -124,11 +152,13 @@ int main(int argc, char **argv)
   g_test_init(&argc, &argv, NULL);
   tmpdir = g_dir_make_tmp("rh-cfg-XXXXXX", NULL);
   g_assert_nonnull(tmpdir);
+  g_setenv("XDG_CONFIG_HOME", tmpdir, TRUE);
 
   g_test_add_func("/config/precedence", test_precedence);
   g_test_add_func("/config/missing-file", test_missing_file);
   g_test_add_func("/config/groups-defaults", test_groups_and_defaults);
   g_test_add_func("/config/parse-error", test_parse_error);
+  g_test_add_func("/config/save-user-key", test_save_user_key);
 
   rc = g_test_run();
   cleanup_tmpdir();
