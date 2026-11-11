@@ -1,6 +1,6 @@
 # rom-hamster（C + GTK4）架构与依赖说明
 
-> 版本：v0.3（在 v0.2 基线上增补 §7.5 刮削扩展点契约；契约先定，实现不在 M0–M5 内）
+> 版本：v0.3（在 v0.2 基线上增补 §7.5 刮削扩展点契约；只留契约，实现暂不排期）
 > 日期：2026-11-11
 > 对照基线：bash 版 rom-hamster 1.0.0 —— 15 个模块、198 个函数、100 个平台规则、28 字段 CSV、76 个单元测试、deb 打包
 > 本文所有"现状"结论均来自对 1.0.0 源码的逐文件核对，不依赖记忆。
@@ -12,7 +12,7 @@
 | 交付形态 | 两二进制（`rom-hamster` CLI + `rom-hamster-gui`）+ 共享 `libromham` | §1.1 |
 | 目标平台 | 仅现代 Linux 桌面；CLI 需 glib 2.66/sqlite 3.35；GUI 需 GTK 4.10 | §1.3 |
 | 排除项 | 不做格式转换、不打补丁、无 Web/服务端、无 NAS 与容器交付；首个版本不实现刮削 | §1.2 §1.3 |
-| 刮削 | 只定扩展点契约（规则文件 + `RhScraper` vtable + 来源字段），实现排在 M6 | §7.5 §14 |
+| 刮削 | 只留扩展点契约（规则文件 + `RhScraper` vtable + 来源字段），**暂不实现、不排期** | §7.5 |
 | 元数据存储 | SQLite 单文件，7 表 + FTS5 trigram，类型化三原则 | §3 |
 | `tags` | 规范化到 `tags` + `game_tags` | §3.5 |
 | 哈希 | `crc32`/`md5`/`sha1` 三列，导入只算 `dat_match_hash` 指定的一种 | §3.5 |
@@ -709,9 +709,11 @@ typedef struct RhImportHandler {
 
 ### 7.5 刮削扩展点（v0.3 只定契约，不实现）
 
-刮削在本项目里被当作"导入的第三种来源"（前两种是本地压缩包/散文件、前端清单），**不另造一套并行的媒体模型**：抓回来的东西仍然走 `store_media_add_sized` 落 `media` 表、按 `<platform>/<main>/<kind>/` 落盘，因此 GUI、导出、去重全部自动复用。首个版本不实现（§1.2 排除项），实现排在 M6。
+刮削在本项目里被当作"导入的第三种来源"（前两种是本地压缩包/散文件、前端清单），**不另造一套并行的媒体模型**：抓回来的东西仍然走 `store_media_add_sized` 落 `media` 表、按 `<platform>/<main>/<kind>/` 落盘，因此 GUI、导出、去重全部自动复用。首个版本不实现（§1.2 排除项），**当前也不排期**：本节只固定接口形状，避免以后接进来时改动 schema 或改坏导出/GUI。
 
 **为什么不是现在写**：网络栈会改动 §8 依赖与 deb `Depends`；来源溯源要动 schema（v2）。把契约先写死，M3/M4 的导出与 GUI 就不必为"将来可能有网络媒体"预留分支。
+
+**将来真要做时，方向已定（离线优先）**：先做本地数据包导入（`manifest.tsv` + `media/`，按 crc32→md5→sha1 匹配，用户或社区自备，不随包分发版权素材），再做图片源（Libretro Thumbnails 目录按 ROM 名匹配），最后才考虑在线 API（ScreenScraper 需开发者凭证，境外源在境内网络可达性差异大）。在线源一律默认关闭、可覆盖 endpoint、失败不阻塞导入。
 
 #### 7.5.1 数据型：`data/scrapers/<id>.conf`
 
@@ -827,7 +829,7 @@ typedef struct RhScraper {
 
 #### 7.5.6 依赖影响
 
-- **新增 `libcurl`**（`libcurl4`，最低 7.74）。它只被核心库里的 `scraper*.c` 使用，但动态链接后仍是 `rom-hamster` 包的硬依赖；若坚持"纯离线安装不装 curl"，构建期加 `-Dscraper=false` 并在 deb 里拆出 `rom-hamster-scraper`（二选一，M6 动工时拍板）。
+- **新增 `libcurl`**（`libcurl4`，最低 7.74）。它只被核心库里的 `scraper*.c` 使用，但动态链接后仍是 `rom-hamster` 包的硬依赖；若坚持"纯离线安装不装 curl"，构建期加 `-Dscraper=false` 并在 deb 里拆出 `rom-hamster-scraper`（二选一，将来实现时拍板）。
 - 不引入 json-glib / libsoup；HTTP 只走 libcurl，JSON 用来源自带的最小解析（或后续单议）。
 - 离线可用性不变：`scrape_enabled=false`（默认）时进程启动与导入路径**不触碰任何网络代码**。
 
@@ -868,7 +870,7 @@ typedef struct RhScraper {
 | `libchdr` | CHD 只读（后续若要识别/校验 CHD） | 仅记录格式字符串 |
 | `chdman`（外部） | CHD 转换 | 不做转换（与 1.0.0 一致） |
 | `unrar`（外部） | RAR5 加密包（libarchive 对部分 RAR5 加密不支持） | 报告该包无法读取，不中断整批导入 |
-| `libcurl4`（**M6 起**） | 刮削的唯一网络栈（§7.5） | M0–M5 不链接；`-Dscraper=false` 时不进依赖 |
+| `libcurl4`（**将来实现刮削时**） | 刮削的唯一网络栈（§7.5） | M0–M5 不链接；`-Dscraper=false` 时不进依赖 |
 
 对照 1.0.0 `deps.sh`：原本 6 个必装命令（`bash`≥4 / `find` / `coreutils` / `grep` / `sed` / `awk`）+ 7 个建议组件（`zip` `unzip` `7z` `zenity` `python3` `unrar` `xdg-open`），以及 `_dep_pkg` 里按 apt/dnf/pacman/brew/opkg 做的包名映射与 `sudo` 自动装包逻辑 —— 全部消失。运行时依赖变成 5 个 `.so`，由 dpkg 声明。
 
@@ -1144,7 +1146,7 @@ ROM_ROOT = /home/zhoux/roms
 | **M2 导入** | `classify`、`archive`（libarchive）、`job` 作业线程、`dat` 索引、`library` 整库、`import` 编排 | fixtures 的 5 类压缩包（zip/7z/rar/单 ROM/混合）+ PSV 特征包 + 二义扩展名 + 多碟 CD 全部落到正确目录；`kill -9` 后重启能续做且库里无半个条目；该阶段 deb 仍可安装 |
 | **M3 检索/管理/导出** | `query`、`detail`（CLI 纯文本）、`manage`、`export` 模板引擎 + 三份前端规格 | 13 维筛选 + 4 排序键结果与直接 SQL 对齐；导出的 ES-DE / Pegasus 清单能被对应前端正常读取；golden file 逐字节 diff 通过；故意写错的模板在**加载期**报出文件名与行号 |
 | **M4 GUI** | `ui-gtk`、主窗口 `GtkColumnView`、详情页 8 类媒体分页、导入进度/取消、启动游戏、首次运行引导、拖拽导入 | 见下方 §14.1 量化指标；空配置首启能走完"选目录 → 建库 → 主窗口"；拖入目录触发导入并有可见进度；无媒体后端时视频降级为外部打开并提示 |
-| **M6 刮削（可选，M5 之后）** | `data/scrapers/<id>.conf`、`RhScraper` vtable、`scrape` 命令、schema v2 来源列 | 规则文件写错在加载期报文件名与行号；关闭开关时导入不触发任何网络请求；命中媒体带 `source/source_url/fetched_at`；重复刮削不产生重复行；凭证文件权限过宽时拒绝读取、日志不回显密钥 |
+
 | **M5 打包与发布** | AppStream metainfo（含真实截图）、完整 gettext、CI 矩阵、lintian 全绿、仓库上传 | `dpkg -i` 后 CLI 与 GUI 均可运行；`dpkg -P` 干净卸载无残留；升级时 conffile 保留管理员修改；`appstreamcli validate` 通过；至少 Ubuntu 24.04 与 Debian 13 两个发行版安装验证通过 |
 
 ### 14.1 M4 性能验收（量化）
