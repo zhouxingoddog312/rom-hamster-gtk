@@ -1777,3 +1777,70 @@ RhErr store_search_fts(RhCtx *ctx, const char *kw, GPtrArray **out)
     return rh_fail(RH_ERR_CONFIG, "store_search_fts: bad arguments");
   return store_game_list(ctx, &f, out);
 }
+
+/* ================================================================= 统计 */
+
+RhErr store_stats(RhCtx *ctx, RhStats *out, GPtrArray **by_platform)
+{
+  static const char *one =
+    "SELECT (SELECT count(*) FROM games),"
+    " (SELECT count(DISTINCT platform) FROM games),"
+    " (SELECT count(*) FROM roms),"
+    " (SELECT count(*) FROM media),"
+    " (SELECT COALESCE(sum(CASE WHEN size > 0 THEN size ELSE 0 END),0) FROM media),"
+    " (SELECT count(*) FROM dat_entries)";
+  static const char *per_plat =
+    "SELECT g.platform, count(DISTINCT g.id),"
+    " COALESCE(sum(CASE WHEN m.size > 0 THEN m.size ELSE 0 END),0)"
+    " FROM games g LEFT JOIN media m ON m.game_id = g.id"
+    " GROUP BY g.platform ORDER BY g.platform";
+  sqlite3_stmt *st = NULL;
+  GPtrArray *rows = NULL;
+  RhErr e;
+
+  if (!ctx || !ctx->db)
+    return err_no_db();
+  if (!out || !by_platform)
+    return rh_fail(RH_ERR_CONFIG, "store_stats: bad arguments");
+  *by_platform = NULL;
+  memset(out, 0, sizeof(*out));
+
+  if (sqlite3_prepare_v2(ctx->db, one, -1, &st, NULL) != SQLITE_OK)
+    return err_from_db(ctx->db, "stats totals");
+  if (sqlite3_step(st) == SQLITE_ROW) {
+    out->games = sqlite3_column_int64(st, 0);
+    out->platforms = sqlite3_column_int64(st, 1);
+    out->roms = sqlite3_column_int64(st, 2);
+    out->media_files = sqlite3_column_int64(st, 3);
+    out->media_bytes = sqlite3_column_int64(st, 4);
+    out->dat_entries = sqlite3_column_int64(st, 5);
+  }
+  sqlite3_finalize(st);
+  st = NULL;
+
+  if (sqlite3_prepare_v2(ctx->db, per_plat, -1, &st, NULL) != SQLITE_OK)
+    return err_from_db(ctx->db, "stats by platform");
+
+  rows = g_ptr_array_new_with_free_func((GDestroyNotify) rh_platform_stat_free);
+  for (;;) {
+    int rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+      RhPlatformStat *p = rh_platform_stat_new();
+      p->platform = g_strdup((const char *) sqlite3_column_text(st, 0));
+      p->games = sqlite3_column_int64(st, 1);
+      p->media_bytes = sqlite3_column_int64(st, 2);
+      g_ptr_array_add(rows, p);
+      continue;
+    }
+    if (rc != SQLITE_DONE)
+      e = err_from_db(ctx->db, "stats by platform");
+    break;
+  }
+  sqlite3_finalize(st);
+  if (!rh_err_ok(&e)) {
+    g_ptr_array_unref(rows);
+    return e;
+  }
+  *by_platform = rows;
+  return rh_ok();
+}

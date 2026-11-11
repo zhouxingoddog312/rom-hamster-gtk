@@ -51,6 +51,10 @@ core_sources = files(
   'src/core/import.c',
   'src/core/library.c',
   'src/core/platform.c',
+  'src/core/query.c',
+  'src/core/detail.c',
+  'src/core/manage.c',
+  'src/core/export.c',
   'src/core/store.c',
 )
 

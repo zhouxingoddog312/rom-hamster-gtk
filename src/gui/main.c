@@ -4,6 +4,7 @@
  * M0 只验证："链接了 GTK、能起一个窗口"，数据层与界面在 M4 接入。
  */
 #include <gtk/gtk.h>
+#include <locale.h>
 
 #include "rh-version.h"
 
@@ -51,6 +52,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
 
 int main(int argc, char **argv)
 {
+  setlocale(LC_ALL, "");
   GtkApplication *app;
   int status;
 

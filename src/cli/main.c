@@ -5,6 +5,7 @@
  * 文案按 §11 约定用英文 msgid，gettext 接入放到 M5。
  */
 #include <glib.h>
+#include <locale.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -59,6 +60,7 @@ static int cmd_config(RhConfig *cfg, int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+  setlocale(LC_ALL, "");
   gboolean show_version = FALSE;
   const char *cmd = NULL;
   gchar **rest = NULL;
@@ -113,6 +115,20 @@ int main(int argc, char **argv)
     rc = cmd_import(restc, rest);
   } else if (g_strcmp0(cmd, "dat") == 0) {
     rc = cmd_dat(restc, rest);
+  } else if (g_strcmp0(cmd, "list") == 0) {
+    rc = cmd_list(restc, rest);
+  } else if (g_strcmp0(cmd, "search") == 0) {
+    rc = cmd_search(restc, rest);
+  } else if (g_strcmp0(cmd, "show") == 0) {
+    rc = cmd_show(restc, rest);
+  } else if (g_strcmp0(cmd, "edit") == 0) {
+    rc = cmd_edit(restc, rest);
+  } else if (g_strcmp0(cmd, "delete") == 0) {
+    rc = cmd_delete(restc, rest);
+  } else if (g_strcmp0(cmd, "export") == 0) {
+    rc = cmd_export(restc, rest);
+  } else if (g_strcmp0(cmd, "stats") == 0) {
+    rc = cmd_stats(restc, rest);
   } else {
     g_printerr("unknown command: %s\n", cmd);
     rc = 2;

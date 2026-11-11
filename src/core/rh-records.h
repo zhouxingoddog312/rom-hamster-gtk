@@ -136,6 +136,26 @@ typedef struct {
 RhFilter *rh_filter_new(void);   /* 全部"不限" */
 void      rh_filter_free(RhFilter *f);
 
+/* --------------------------------------------------------------- 统计记录 */
+
+typedef struct {
+  gint64 games;
+  gint64 platforms;
+  gint64 roms;
+  gint64 media_files;
+  gint64 media_bytes;     /* size 未知按 0 计 */
+  gint64 dat_entries;
+} RhStats;
+
+typedef struct {
+  gchar  *platform;
+  gint64  games;
+  gint64  media_bytes;
+} RhPlatformStat;
+
+RhPlatformStat *rh_platform_stat_new(void);
+void            rh_platform_stat_free(RhPlatformStat *s);
+
 /* --------------------------------------------------------------- 作业记录 */
 
 typedef struct {

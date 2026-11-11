@@ -227,6 +227,21 @@ void rh_filter_free(RhFilter *f)
   g_free(f);
 }
 
+/* --------------------------------------------------------------- 统计 */
+
+RhPlatformStat *rh_platform_stat_new(void)
+{
+  return g_new0(RhPlatformStat, 1);
+}
+
+void rh_platform_stat_free(RhPlatformStat *s)
+{
+  if (!s)
+    return;
+  g_free(s->platform);
+  g_free(s);
+}
+
 /* --------------------------------------------------------------- 作业 */
 
 RhJob *rh_job_new(void)

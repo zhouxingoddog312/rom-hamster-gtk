@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./Alpha.nes</path>
+    <name>Alpha</name>
+    <desc>Alpha description</desc>
+    <rating>0.85</rating>
+    <releasedate>19900101T000000</releasedate>
+    <developer>DevA</developer>
+    <publisher>PubX</publisher>
+    <genre>Action</genre>
+    <players>1</players>
+    <image>./media/Alpha-image.png</image>
+  </game>
+  <game>
+    <path>./Beta.m3u</path>
+    <name>Beta</name>
+    <desc>Beta description</desc>
+    <rating>0.50</rating>
+    <releasedate>19950101T000000</releasedate>
+    <developer>DevB</developer>
+    <publisher>PubY</publisher>
+    <genre>RPG</genre>
+    <players>2</players>
+    <thumbnail>./media/Beta-thumb.png</thumbnail>
+  </game>
+</gameList>

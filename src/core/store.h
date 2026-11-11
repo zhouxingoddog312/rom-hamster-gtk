@@ -43,6 +43,9 @@ RhErr store_game_delete(RhCtx *ctx, const char *id);
 /* *out = GPtrArray<RhGame*>，free_func 已设好，调用方 g_ptr_array_unref() */
 RhErr store_game_list(RhCtx *ctx, const RhFilter *f, GPtrArray **out);
 
+/* 统计（M3）：库级汇总 + 按平台分布（*by_platform = GPtrArray<RhPlatformStat*>） */
+RhErr store_stats(RhCtx *ctx, RhStats *out, GPtrArray **by_platform);
+
 RhErr store_game_count(RhCtx *ctx, gint64 *out);
 
 /* ----------------------------------------------------------- 子表：ROM */

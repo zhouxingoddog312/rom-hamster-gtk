@@ -1,0 +1,28 @@
+collection: nes
+launch: retroarch -L core.so
+extensions: nes unf unif
+game: Alpha
+file: Alpha.nes
+summary: Alpha description
+developer: DevA
+publisher: PubX
+genre: Action
+players: 1
+rating: 0.85
+release: 1990
+tags: classic
+assets.boxFront: media/boxfront/Alpha.png
+
+game: Beta
+file: Beta.m3u
+summary: Beta description
+developer: DevB
+publisher: PubY
+genre: RPG
+players: 2
+rating: 0.50
+release: 1995
+tags: rpg
+assets.screenshot: media/screenshot/Beta.png
+
+
