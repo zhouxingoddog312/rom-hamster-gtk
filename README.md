@@ -10,9 +10,11 @@
 
 ## 当前状态
 
-**M1 存储与规则已完成**（2026-11-11）：`store_*` 全量 API、`platforms.conf` 五段规则
-编译、三包 deb 布局与首个可安装 deb 均已落地，验收 14/14 通过。
-验收明细见 `docs/m1-verification.md`，一键复跑 `tools/m1-check.sh`。
+**M2 导入已完成**（2026-11-11）：`classify` / `rh-archive` / `rh-hash` / `dat` /
+`job` / `import` / `library` 七个模块 + CLI `init` / `import` / `dat` 已落地；
+两阶段导入、六级压缩包分流、多碟 + m3u + DAT 匹配、整库导入（ES / Pegasus）、
+`kill -9` 后幂等续做全部实机通过。验收 29 项全过（rar 因无压缩器 SKIP），
+M1 回归 9/9。明细见 `docs/m2-verification.md`，一键复跑 `tools/m2-check.sh`。
 
 里程碑进度见 `ARCHITECTURE.md` §14：M1 存储与规则（含首个可安装 deb）→ M2 导入 →
 M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
@@ -25,6 +27,7 @@ M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
 | `docs/rules-verification.md` | `platforms.conf` 与 `frontends/*.conf` 的一手来源、修正清单、刻意不采纳项、存疑项 |
 | `docs/m0-verification.md` | M0 验收记录：环境、结果、与文档的偏差 |
 | `docs/m1-verification.md` | M1 验收记录：14 项证据、与 `ARCHITECTURE.md` 的 6 处偏差及理由、修掉的 8 个真实缺陷 |
+| `docs/m2-verification.md` | M2 验收记录：29 项证据、修掉的 17 个真实缺陷、未闭环清单 |
 | `data/platforms.conf` | 101 个平台规则（5 段：扩展名/街机后缀/媒体目录/媒体后缀/归档后缀） |
 | `data/frontends/es.conf` | EmulationStation（RetroPie）导入 + 导出规格 |
 | `data/frontends/es-de.conf` | ES-DE 导入 + 导出规格 |
@@ -53,6 +56,9 @@ meson test -C build
 # 纯 CLI（不含 GTK 依赖的机器）
 meson setup build-nogui -Dgui=false
 ninja -C build-nogui
+
+# M2 全部验收项（导入 / 整库 / 续做 / deb）
+bash tools/m2-check.sh
 
 # M1 全部验收项（含 deb 构建与安装，需 root 才能跑安装段）
 tools/m1-check.sh

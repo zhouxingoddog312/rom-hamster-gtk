@@ -76,7 +76,6 @@ static void test_crud_roundtrip(void)
 {
   RhGame *g, *got = NULL;
   gchar *created;
-  RhErr e;
 
   open_ctx("crud");
 
@@ -305,6 +304,7 @@ static void test_filters(void)
 
   g = mk_game("f4", "psx", "Multi Disc Game", "psx/f4");
   g->is_multi_disc = TRUE;
+  g_free(g->patch_type);
   g->patch_type = g_strdup("generic");
   assert_ok(store_game_upsert(ctx, g), "f4");
   rh_game_free(g);
@@ -475,7 +475,6 @@ static void test_jobs(void)
   gint64 job_id = 0;
   GPtrArray *jobs, *items;
   RhJob *job = NULL;
-  RhErr e;
 
   open_ctx("jobs");
 

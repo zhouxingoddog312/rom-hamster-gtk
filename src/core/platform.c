@@ -422,7 +422,12 @@ static RhErr parse_kv_line(RhPlatformRules *r, const char *group,
   val = g_strdup(eq + 1);
   g_strstrip(key);
   g_strstrip(val);
-  g_ascii_strdown(key, -1);
+  {
+    gchar *lower = g_ascii_strdown(key, -1);
+
+    g_free(key);
+    key = lower;
+  }
 
   if (!*key) {
     g_free(key);

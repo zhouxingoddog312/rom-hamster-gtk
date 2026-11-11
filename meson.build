@@ -41,6 +41,15 @@ core_sources = files(
   'src/core/rh-config.c',
   'src/core/rh-ctx.c',
   'src/core/rh-records.c',
+  'src/core/rh-str.c',
+  'src/core/rh-fs.c',
+  'src/core/rh-hash.c',
+  'src/core/classify.c',
+  'src/core/rh-archive.c',
+  'src/core/dat.c',
+  'src/core/job.c',
+  'src/core/import.c',
+  'src/core/library.c',
   'src/core/platform.c',
   'src/core/store.c',
 )
@@ -67,7 +76,7 @@ libromham_dep = declare_dependency(
 # CLI
 # ---------------------------------------------------------------------------
 executable('rom-hamster',
-  files('src/cli/main.c', 'src/cli/ui-cli.c'),
+  files('src/cli/main.c', 'src/cli/ui-cli.c', 'src/cli/cmds.c'),
   dependencies : libromham_dep,
   install : true,
   install_rpath : rh_rpath)
@@ -131,4 +140,9 @@ if get_option('tests')
     files('tests/unit/test-store-crud.c'),
     dependencies : libromham_dep)
   test('store-crud', test_store_crud)
+
+  test_util = executable('test-util',
+    files('tests/unit/test-util.c'),
+    dependencies : libromham_dep)
+  test('str-fs-hash', test_util)
 endif

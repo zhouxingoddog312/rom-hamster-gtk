@@ -21,6 +21,7 @@ typedef struct RhCtx {
   gchar     *cache_dir;
   gboolean   in_tx;              /* store_tx_begin 之后为 TRUE */
   gboolean   fts_trigram;        /* 库是否支持 trigram 分词 */
+  gint       cancel_flag;        /* 作业线程只写这一处（atomic_int 语义） */
   gpointer   user_data;          /* 前端私有数据，核心不动 */
 } RhCtx;
 

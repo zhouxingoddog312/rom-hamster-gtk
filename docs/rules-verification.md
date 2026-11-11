@@ -68,10 +68,14 @@ ES-DE 的扩展名清单是**为容错而做的超集**，它自己负责启动�
 1. **ES-DE 旧版本行为**：以上结论基于 master 分支源码（ES-DE 3.x）。若用户使用
    1.x/2.x，媒体标签是否被读取未验证。导出时以 3.x 为准。
 2. **Pegasus 多行描述**：当前单行输出会丢失换行，属已知降级（记入 M3 验收关注项）。
-3. **`psvita`**：ES-DE 用 `.psvita` 标记文件而非 `.vpk`；本清单两者都收，导入时
-   若遇到 `.vpk` 需确认是否被前端识别。
-4. **`.bin` 的二义**：`gamegear`/`mastersystem`/`sg-1000`/`sega32x` 等共享 `.bin`，
-   已写入 `ambiguous_formats=.bin`，导入时会走确认流程。这是无法从文件名消解的
-   固有二义，只能靠目录名或用户选择。
-5. **`arcade` 平台的 `.7z`**：本版给 fbneo/mame/neogeo/cps* 加了 `.7z`，但 1.0.0
-   只认 `.zip`。是否接受 `.7z` 直存需要在实际导入测试里确认（MAME 支持 7z 读取）。
+3. **`psvita`**（M2 已实测）：ES-DE 用 `.psvita` 标记文件而非 `.vpk`；本清单两者
+   都收。M2 `tests` 里 `.vpk` 命中 PSV 特征包分支，整体保留到
+   `psvita/<name>/rom/<name>.vpk`，不再解包；`tools/m2-check.sh` 第 12 项为证。
+4. **`.bin` 的二义**（M2 部分闭环）：`gamegear`/`mastersystem`/`sg-1000`/`sega32x`
+   等共享 `.bin`，已写入 `ambiguous_formats=.bin`。交互模式会提问；`-y` 取候选首位
+   （实测 `.bin` → atari2600），要精确归属需 `--platforms` 自定义规则。
+   无法从文件名消解的固有二义只能靠目录名或用户选择。
+5. **`arcade` 平台的 `.7z`**（M2 已闭环）：原 1.0.0 只认 `.zip`。M2 街机直存分支
+   改为 `.zip/.7z` 均可（根目录平铺且街机后缀 ≥95%），`rom_format` 按实际后缀记；
+   实测 `mame_pack.7z` 落到 `mame/mame_pack/rom/mame_pack.7z`
+   （`tools/m2-check.sh` 第 13 项）。

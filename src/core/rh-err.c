@@ -1,5 +1,6 @@
 #include "rh-err.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -57,4 +58,46 @@ const char *rh_err_code_name(RhErrCode code)
 gboolean rh_err_is_transient(RhErrCode code)
 {
   return code == RH_ERR_DB_BUSY;
+}
+
+void rh_err_clear(RhErr *e)
+{
+  if (!e)
+    return;
+  e->code = RH_OK;
+  e->msg[0] = '\0';
+}
+
+void rh_err_set(RhErr *e, RhErrCode code, const char *fmt, ...)
+{
+  va_list ap;
+
+  if (!e)
+    return;
+  e->code = code;
+  if (fmt) {
+    va_start(ap, fmt);
+    g_vsnprintf(e->msg, sizeof e->msg, fmt, ap);
+    va_end(ap);
+  } else {
+    g_strlcpy(e->msg, rh_err_code_name(code), sizeof e->msg);
+  }
+}
+
+void rh_err_set_errno(RhErr *e, RhErrCode code, const char *fmt, ...)
+{
+  va_list ap;
+  gchar head[RH_ERR_MSG_MAX];
+
+  if (!e)
+    return;
+  if (fmt) {
+    va_start(ap, fmt);
+    g_vsnprintf(head, sizeof head, fmt, ap);
+    va_end(ap);
+  } else {
+    g_strlcpy(head, rh_err_code_name(code), sizeof head);
+  }
+  e->code = code;
+  g_snprintf(e->msg, sizeof e->msg, "%s: %s", head, g_strerror(errno));
 }

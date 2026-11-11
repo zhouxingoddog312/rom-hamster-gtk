@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cmds.h"
 #include "rh-config.h"
 #include "rh-ui.h"
 #include "rh-version.h"
@@ -106,6 +107,12 @@ int main(int argc, char **argv)
   int rc;
   if (g_strcmp0(cmd, "config") == 0) {
     rc = cmd_config(cfg, restc, rest);
+  } else if (g_strcmp0(cmd, "init") == 0) {
+    rc = cmd_init(restc, rest);
+  } else if (g_strcmp0(cmd, "import") == 0) {
+    rc = cmd_import(restc, rest);
+  } else if (g_strcmp0(cmd, "dat") == 0) {
+    rc = cmd_dat(restc, rest);
   } else {
     g_printerr("unknown command: %s\n", cmd);
     rc = 2;
