@@ -6,7 +6,7 @@
   （glib 2.88.0、sqlite 3.46.1、libarchive 3.8.5、libxml2 2.15.2、GTK 4.22.4）
 - 一键复跑：`bash tools/m2-check.sh`（完整含 deb）；`SKIP_DEB=1` 只跑功能；
   `SKIP_BUILD=1` 复用现有构建
-- 结果：**`tools/m2-check.sh` PASS 31 / FAIL 0 / SKIP 1（rar）**；
+- 结果：**`tools/m2-check.sh` PASS 43 / FAIL 0 / SKIP 0**（含 deb；`SKIP_DEB=1` 时 42 项）。rar 已实机补测，见 §2 第 32–34 条；
   `tools/m1-check.sh` 回归 **PASS 9 / FAIL 0**（含三 deb 构建、lintian 0/0）
 
 ## 1. 交付内容
@@ -26,7 +26,7 @@
 
 GUI 侧未改：M2 的 GUI 进度/取消按 §14 属 M3 接线项，本阶段只保证核心 `rh_ui` 回调可用。
 
-## 2. 验收项（31 条全过）
+## 2. 验收项（43 条全过，含 deb）
 
 | # | 判据 | 证据 |
 |---|---|---|
@@ -60,6 +60,16 @@ GUI 侧未改：M2 的 GUI 进度/取消按 §14 属 M3 接线项，本阶段只
 | 29 | 续做后无重复 ROM 行 | DB 断言 |
 | 30 | `dpkg-buildpackage` 构建三 deb | 构建日志 |
 | 31 | staging 下三个 deb 产物存在 | 文件存在 |
+| 32 | rar 单 ROM 包直存 `nes/single_rar/rom/single_rar.rar` | 文件存在（`rar 7.20` 现场造包） |
+| 33 | rar 混合包 ROM 解压 `nes/rarc/rom/rarc.nes` | 文件存在 |
+| 34 | rar 混合包封面 `nes/rarc/covers/rar.png` | 文件存在 |
+| 35 | 整库同名两条清单项 → 第 1 碟落位 | `dreamcast/Show/rom/Show (Disc 1).gdi` |
+| 36 | 整库多碟 m3u 生成 | `Show.m3u` |
+| 37 | 整库清单缺一条 ROM：其余仍导入且告警 | `warning: 清单中的 ROM 不存在，跳过` |
+| 38 | 整库多碟 `is_multi_disc=1` 且 2 条 rom | DB 断言 |
+| 39 | 同一整库清单重复导入幂等（无重复 rom/media） | DB 断言 |
+| 40 | 重启后无遗留 `queued` 作业 | DB 断言 |
+| 41 | 被 `kill -9` 的作业被标记 interrupted | `jobs.error like '%interrupted%'` |
 
 另：三 deb 已在 root 通道 `dpkg -i` 覆盖安装，`rom-hamster --version`、`import --help`
 正常，`RH_SMOKE_TEST=1 xvfb-run rom-hamster-gui` 退出码 0。
@@ -101,6 +111,10 @@ GUI 侧未改：M2 的 GUI 进度/取消按 §14 属 M3 接线项，本阶段只
 17. **街机 `.7z` 被当混合包解压**：街机直存分支只认 `.zip`，`.7z` 会解出
     `a.bin`/`b.rom` 并落到 atari2600；改为 `.zip/.7z` 均可直存，`rom_format`
     按实际后缀记（`docs/rules-verification.md` §5 第 5 条由此闭环）。
+18. **整库同名多碟被压成一碟**：`library.c` 的碟号只从“目录里已有文件”推断，
+    不看源文件名，两个 `<name>` 相同的条目都落成 `Show.gdi`，第二张碟覆盖/跳过。
+    改为用 `rh_parse_disc_no(base_name)` 取碟号，目标名 `Show (Disc N).gdi`，
+    并据此置 `is_multi_disc`（本轮新增整库多碟夹具后暴露）。
 
 其余小坑：`RH_ERR_USAGE` 不存在、`GStatBuf` 无 `st_mtim`、缺 `<glib/gstdio.h>`、
 `\x01\x02` 被当续位十六进制、`false`→`FALSE`、`&(RhErr){...}` 不能直接比较、
@@ -108,22 +122,20 @@ GUI 侧未改：M2 的 GUI 进度/取消按 §14 属 M3 接线项，本阶段只
 
 ## 4. 已知未闭环（M2 范围内接受，记录在案）
 
-1. **rar 未实测**：WSL 里只有 `unrar`、没有 rar 压缩器，造不出夹具；
-   libarchive 读取路径与 zip/7z 相同，m2-check 打印 SKIP 而不是假 PASS。
-2. **非交互多候选后缀取第一个**：`.bin` → atari2600、`.cue` → 3do、`.pkg` → ps3，
+1. **非交互多候选后缀取第一个**：`.bin` → atari2600、`.cue` → 3do、`.pkg` → ps3，
    与 bash 的“弹菜单”语义不同；`-y` 是显式选择默认，交互模式仍会提问。
    平台归属要精确，需 `--platforms` 自定义规则或交互选择。
-3. **被 kill 的 job 状态停在 `queued`**：未实现“启动时把未完成 job 标成
-   interrupted”；续做靠幂等重放（size+mtime 一致跳过）+ `job_items` 状态，
-   §14 要求的“库里无半个条目”已满足。
-4. **`rh_job_unfinished` 无 CLI 消费者**：留待作业列表/续做入口一并接。
-5. **整库导入分支覆盖有限**：只测了单条 ES、单条 Pegasus；多碟、清单缺文件、
-   追加到已有游戏的分支未测。
-6. **GLib 自身 23 byte 泄漏**：`g_option_context_parse` 内部
+2. **中断语义是“标记 + 重放”，不是“自动续做”**：导入启动时把上次未完成
+   job 置 `failed` + `error='interrupted by restart'`，随后整批重放；
+   `size+mtime` 一致即跳过，所以不会重复复制。`rh_job_unfinished` 已有消费者
+   （清扫逻辑），但仍没有 `job list/resume` CLI 入口。
+3. **整库“追加到已有游戏”的语义**：同名同目录再次导入按幂等处理（覆盖元数据、
+   保留已有 rom），但没有“只追加新碟、不碰旧元数据”的显式开关。
+4. **GLib 自身 23 byte 泄漏**：`g_option_context_parse` 内部
    `g_locale_to_utf8` 的单次分配在 `--help` 也出现，非本项目代码；ASan 单元
    测试与库导入路径均无泄漏。
-7. **Pegasus 多行描述**不做保留（单行读取），影响面在 M3 导出侧。
-8. **GUI M2 接线未做**：进度/取消按 §14 安排在 M3。
+5. **Pegasus 多行描述**不做保留（单行读取），影响面在 M3 导出侧。
+6. **GUI M2 接线未做**：进度/取消按 §14 安排在 M3。
 
 ## 5. 复跑方式
 

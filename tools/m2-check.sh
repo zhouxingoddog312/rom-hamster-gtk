@@ -47,6 +47,9 @@ head -c 12 /dev/urandom > "$IN/a.bin"
 head -c 12 /dev/urandom > "$IN/b.rom"
 7z a -bd -y "$IN/mame_pack.7z" "$IN/a.bin" "$IN/b.rom" >/dev/null
 head -c 64 /dev/urandom > "$IN/loose.nes"
+head -c 64 /dev/urandom > "$IN/rarc.nes"
+head -c 8 /dev/urandom > "$IN/rar.png"
+(cd "$IN" && rar a -idq single_rar.rar cart2.nes && rar a -idq mixed_rar.rar rarc.nes rar.png)
 printf 'GDI1' > "$IN/Quest (Disc 1).gdi"
 printf 'GDI2' > "$IN/Quest (Disc 2).gdi"
 
@@ -69,7 +72,9 @@ check $? "rom-hamster dat import"
 
 # 只导入压缩包类夹具，单文件类分开导入
 mkdir -p "$ROOT/pack"; cp "$IN/single_nes.zip" "$IN/single_7z.7z" "$IN/mixed.zip" \
-  "$IN/psv_game.vpk" "$IN/Update.pkg" "$IN/mame_pack.7z" "$IN/Quest (Disc 1).gdi" "$IN/Quest (Disc 2).gdi" "$ROOT/pack"
+  "$IN/psv_game.vpk" "$IN/Update.pkg" "$IN/mame_pack.7z" \
+  "$IN/single_rar.rar" "$IN/mixed_rar.rar" \
+  "$IN/Quest (Disc 1).gdi" "$IN/Quest (Disc 2).gdi" "$ROOT/pack"
 $BIN import -y --platforms data/platforms.conf "$ROOT/pack" >"$ROOT/import.log" 2>&1
 rc=$?
 check $rc "压缩包/多碟导入命令退出码 0" "(见 $ROOT/import.log)"
@@ -79,6 +84,12 @@ R="$ROOT/roms"
   || bad "zip 单 ROM 包落到 nes/single_nes/rom"
 [ -f "$R/nes/single_7z/rom/single_7z.7z" ] && ok "7z 单 ROM 包落到 nes/single_7z/rom" \
   || bad "7z 单 ROM 包落到 nes/single_7z/rom"
+[ -f "$R/nes/single_rar/rom/single_rar.rar" ] && ok "rar 单 ROM 包落到 nes/single_rar/rom" \
+  || bad "rar 单 ROM 包落到 nes/single_rar/rom"
+[ -f "$R/nes/rarc/rom/rarc.nes" ] && ok "rar 混合包 ROM 解压落 rom/" \
+  || bad "rar 混合包 ROM 解压落 rom/"
+[ -f "$R/nes/rarc/covers/rar.png" ] && ok "rar 混合包封面落 covers/" \
+  || bad "rar 混合包封面落 covers/"
 [ -f "$R/nes/cart/rom/cart.nes" ] && ok "混合包中 ROM 解压落 rom/" \
   || bad "混合包中 ROM 解压落 rom/"
 [ -f "$R/nes/cart/covers/pic.png" ] && ok "混合包封面落 covers/" \
@@ -140,10 +151,6 @@ PY
 grep -q 'DBCHECK_FAIL=0' "$ROOT/db.log" && ok "数据库断言（游戏/多碟/DAT/媒体/子目录）" \
   || bad "数据库断言（游戏/多碟/DAT/媒体/子目录）" "(见 $ROOT/db.log)"
 
-if [ "${RAR_SKIP_NOTE:-1}" = "1" ]; then
-  printf "SKIP  rar 压缩包（本机只有 unrar、无 rar 压缩器，无法构造夹具；libarchive 读取路径与 zip/7z 相同）\n"
-fi
-
 # ---------------------------------------------------------------- 整库导入
 LIB="$ROOT/export"
 mkdir -p "$LIB/megadrive"
@@ -177,6 +184,55 @@ print('PASS' if r and r[0][1] == 'Sega' and r[0][2] == 1991 else 'FAIL', '整库
 PY
 grep -q 'PASS' "$ROOT/libdb.log" && ok "整库元数据（名称/厂商/年份）" || bad "整库元数据（名称/厂商/年份）"
 
+# 整库分支：同一 <name> 的两张碟 + 清单里 ROM 缺失
+mkdir -p "$LIB/dreamcast" "$LIB/nes"
+printf 'GDI-A' > "$LIB/dreamcast/Show (Disc 1).gdi"
+printf 'GDI-B' > "$LIB/dreamcast/Show (Disc 2).gdi"
+printf 'PRESENT' > "$LIB/nes/Present.nes"
+cat > "$LIB/dreamcast/gamelist.xml" <<'EOF'
+<?xml version="1.0"?>
+<gameList>
+  <game><path>./Show (Disc 1).gdi</path><name>Show</name></game>
+  <game><path>./Show (Disc 2).gdi</path><name>Show</name></game>
+</gameList>
+EOF
+cat > "$LIB/nes/gamelist.xml" <<'EOF'
+<?xml version="1.0"?>
+<gameList>
+  <game><path>./Gone.nes</path><name>Gone</name></game>
+  <game><path>./Present.nes</path><name>Present</name></game>
+</gameList>
+EOF
+$BIN import -y --platforms data/platforms.conf "$LIB" >>"$ROOT/lib.log" 2>&1
+check $? "整库分支导入退出码 0" "(见 $ROOT/lib.log)"
+[ -f "$R/dreamcast/Show/rom/Show (Disc 1).gdi" ] && ok "整库多碟：第 1 碟落位" \
+  || bad "整库多碟：第 1 碟落位"
+[ -f "$R/dreamcast/Show/rom/Show.m3u" ] && ok "整库多碟：m3u 生成" || bad "整库多碟：m3u 生成"
+[ -f "$R/nes/Present/rom/Present.nes" ] && ok "整库：清单缺一条时其余仍导入" \
+  || bad "整库：清单缺一条时其余仍导入"
+grep -q "不存在，跳过" "$ROOT/lib.log" && ok "整库：缺失 ROM 记录告警并跳过" \
+  || bad "整库：缺失 ROM 记录告警并跳过"
+python3 - "$R/romhamster.db" <<'PY' >"$ROOT/libdb2.log" 2>&1
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+multi = db.execute("select is_multi_disc from games where dir_path='dreamcast/Show'").fetchone()
+roms = db.execute("select count(*) from roms r join games g on g.id=r.game_id where g.dir_path='dreamcast/Show'").fetchone()[0]
+print('PASS' if multi and multi[0] == 1 and roms == 2 else 'FAIL', '整库多碟记录', multi, roms)
+PY
+grep -q 'PASS' "$ROOT/libdb2.log" && ok "整库多碟：is_multi_disc=1 且 2 条 rom" \
+  || bad "整库多碟：is_multi_disc=1 且 2 条 rom"
+# 同一清单重复导入必须幂等
+$BIN import -y --platforms data/platforms.conf "$LIB" >>"$ROOT/lib.log" 2>&1
+python3 - "$R/romhamster.db" <<'PY' >"$ROOT/librep.log" 2>&1
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+dup = db.execute('select count(*) from (select game_id,kind,filename,count(*) c from media group by 1,2,3 having c>1)').fetchone()[0]
+roms = db.execute("select count(*) from roms r join games g on g.id=r.game_id where g.dir_path='dreamcast/Show'").fetchone()[0]
+print('PASS' if dup == 0 and roms == 2 else 'FAIL', '重复导入幂等', dup, roms)
+PY
+grep -q 'PASS' "$ROOT/librep.log" && ok "整库重复导入幂等（无重复媒体/rom）" \
+  || bad "整库重复导入幂等（无重复媒体/rom）"
+
 # ---------------------------------------------------------------- kill -9 续做
 RES="$ROOT/resume"
 mkdir -p "$RES/in"
@@ -205,12 +261,16 @@ db = sqlite3.connect(sys.argv[1])
 games = db.execute('select count(*) from games').fetchone()[0]
 orphan = db.execute('select count(*) from games g where not exists (select 1 from roms r where r.game_id=g.id)').fetchone()[0]
 dup = db.execute('select count(*) from (select game_id,filename,count(*) c from roms group by 1,2 having c>1)').fetchone()[0]
-print(games, orphan, dup)
+queued = db.execute("select count(*) from jobs where state='queued'").fetchone()[0]
+interrupted = db.execute("select count(*) from jobs where error like '%interrupted%'").fetchone()[0]
+print(games, orphan, dup, queued, interrupted)
 PY
-read -r final_games final_orphan final_dup < "$ROOT/resume2.log"
+read -r final_games final_orphan final_dup final_queued final_interrupted < "$ROOT/resume2.log"
 [ "$final_games" = "100" ] && ok "续做后 100 条全部入库" || bad "续做后 100 条全部入库（实际 $final_games）"
 [ "$final_orphan" = "0" ] && ok "续做后无半条记录" || bad "续做后无半条记录"
 [ "$final_dup" = "0" ] && ok "续做后无重复 ROM 行" || bad "续做后无重复 ROM 行"
+[ "$final_queued" = "0" ] && ok "重启后无遗留 queued 作业" || bad "重启后无遗留 queued 作业（$final_queued）"
+[ "$final_interrupted" -ge 1 ] && ok "被杀作业被标记为 interrupted" || bad "被杀作业被标记为 interrupted"
 
 # ---------------------------------------------------------------- deb
 if [ "${SKIP_DEB:-0}" = "1" ]; then

@@ -479,6 +479,15 @@ RhErr rh_library_import(RhCtx *ctx, RhPlatformRules *rules, const char *dir,
       ext = rh_ext_of(rom);
       base_name = rh_rom_base_name(rom, ext);
       main = g_strdup(le->name && *le->name ? le->name : base_name);
+      /* 碟号取自源文件名（"X (Disc 1).gdi"），目录名用清单里的 <name>；
+       * 不能只靠目录里已有文件推断，否则第一张碟会落成 "X.gdi"。 */
+      guint dno = 0;
+      {
+        gchar *fn_main = NULL;
+
+        dno = (guint) rh_parse_disc_no(base_name, &fn_main);
+        g_free(fn_main);
+      }
       if (!plat) {
         GPtrArray *cand = platform_by_extension(rules, ext);
 
@@ -525,11 +534,13 @@ RhErr rh_library_import(RhCtx *ctx, RhPlatformRules *rules, const char *dir,
         }
         if (game && game->is_multi_disc)
           multi = TRUE;
+        if (dno > 0)
+          multi = TRUE;
         if (multi) {
           tname = g_strdup_printf("%s (%s %u)%s", main,
                                   rh_config_get(ctx->config, "disc_label_prefix") ?
                                   rh_config_get(ctx->config, "disc_label_prefix") : "Disc",
-                                  roms->len + 1, ext ? ext : "");
+                                  dno > 0 ? dno : roms->len + 1, ext ? ext : "");
         } else {
           tname = g_strdup_printf("%s%s", main, ext ? ext : "");
         }

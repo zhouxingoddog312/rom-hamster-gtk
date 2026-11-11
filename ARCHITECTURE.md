@@ -1,6 +1,6 @@
 # rom-hamster（C + GTK4）架构与依赖说明
 
-> 版本：v0.2（动工前基线，已逐板块过审）
+> 版本：v0.3（在 v0.2 基线上增补 §7.5 刮削扩展点契约；契约先定，实现不在 M0–M5 内）
 > 日期：2026-11-11
 > 对照基线：bash 版 rom-hamster 1.0.0 —— 15 个模块、198 个函数、100 个平台规则、28 字段 CSV、76 个单元测试、deb 打包
 > 本文所有"现状"结论均来自对 1.0.0 源码的逐文件核对，不依赖记忆。
@@ -11,7 +11,8 @@
 |---|---|---|
 | 交付形态 | 两二进制（`rom-hamster` CLI + `rom-hamster-gui`）+ 共享 `libromham` | §1.1 |
 | 目标平台 | 仅现代 Linux 桌面；CLI 需 glib 2.66/sqlite 3.35；GUI 需 GTK 4.10 | §1.3 |
-| 排除项 | 不做格式转换、不打补丁、不刮削、无 Web/服务端、无 NAS 与容器交付 | §1.2 §1.3 |
+| 排除项 | 不做格式转换、不打补丁、无 Web/服务端、无 NAS 与容器交付；首个版本不实现刮削 | §1.2 §1.3 |
+| 刮削 | 只定扩展点契约（规则文件 + `RhScraper` vtable + 来源字段），实现排在 M6 | §7.5 §14 |
 | 元数据存储 | SQLite 单文件，7 表 + FTS5 trigram，类型化三原则 | §3 |
 | `tags` | 规范化到 `tags` + `game_tags` | §3.5 |
 | 哈希 | `crc32`/`md5`/`sha1` 三列，导入只算 `dat_match_hash` 指定的一种 | §3.5 |
@@ -706,6 +707,130 @@ typedef struct RhImportHandler {
 - 数据库后端：不做多后端抽象（§13）。
 - 缩略图缓存索引：若将来需要百万级缓存键查询，才考虑 LMDB/gdbm 这类 kv 库 —— 不是现在。
 
+### 7.5 刮削扩展点（v0.3 只定契约，不实现）
+
+刮削在本项目里被当作"导入的第三种来源"（前两种是本地压缩包/散文件、前端清单），**不另造一套并行的媒体模型**：抓回来的东西仍然走 `store_media_add_sized` 落 `media` 表、按 `<platform>/<main>/<kind>/` 落盘，因此 GUI、导出、去重全部自动复用。首个版本不实现（§1.2 排除项），实现排在 M6。
+
+**为什么不是现在写**：网络栈会改动 §8 依赖与 deb `Depends`；来源溯源要动 schema（v2）。把契约先写死，M3/M4 的导出与 GUI 就不必为"将来可能有网络媒体"预留分支。
+
+#### 7.5.1 数据型：`data/scrapers/<id>.conf`
+
+与 `data/frontends/<id>.conf` 同构：一份文件描述一个来源，INI + 路径表达式，**不引入 JSON 解析依赖**（当前依赖集没有 json-glib；若将来确需深层嵌套，再单议）。用户放 `~/.config/rom-hamster/scrapers/` 覆盖。
+
+```ini
+[scraper]
+id          = screenscraper
+name        = ScreenScraper.fr
+spec_version = 1
+api         = https://api.screenscraper.fr/api2/jeuInfos.php
+auth        = devid,devpassword,ssid,sspassword   ; 只写键名，值在 secrets.conf
+rate_limit  = 1/s             ; 令牌桶，按来源声明
+timeout     = 30
+cache_ttl   = 30d
+max_retry   = 3
+
+[query]
+platform = %platform_id%      ; 走 [platform_map] 映射，不硬编码
+crc      = %crc32%
+md5      = %md5%
+sha1     = %sha1%
+name     = %game_name%        ; 仅在哈希全无命中时退化使用
+language = %scrape_lang%
+
+[platform_map]
+nes = 3                       ; 本地平台 id → 来源平台 id
+
+[response]
+game        = response.jeu
+name        = nom
+description = synopsis[%scrape_lang%]
+developer   = editeur
+publisher   = editeur
+year        = dates[release].text
+genre       = genres[0].noms[%scrape_lang%]
+
+[media]
+covers      = medias[type=box-2D][region=%scrape_region%].url
+screenshots = medias[type=screenshot][region=%scrape_region%].url
+marquees    = medias[type=wheel][region=%scrape_region%].url
+videos      = medias[type=video-normalized][region=%scrape_region%].url
+```
+
+路径表达式是**闭集**：`a.b`、`a[0]`、`a[key=value]`、`a[%var%]`，取不到即视为"该来源没有这项"，**不报错、不写空值**。字段名取不到的来源由配置作者负责，加载期校验 `[scraper]` 必填项。
+
+#### 7.5.2 代码型：`RhScraper` vtable
+
+规则文件只能描述"怎么问、怎么取"，**分页、限速、鉴权失败重试、媒体类型推断**仍是代码。结构体进 §7.3 同一套 vtable 范式，`plugin.c` 显式数组注册：
+
+```c
+typedef struct RhScrapeMatch {
+  gchar *source_id;      /* scraper id */
+  gchar *source_url;     /* 命中详情页/API 查询 URL，写 media.source_url */
+  gchar *name;           /* 来源给出的规范名 */
+  gchar *description;
+  gchar *developer;
+  gchar *publisher;
+  gint   year;
+  gchar *genre;
+  gchar *media_url[RH_MEDIA_KIND_COUNT];   /* 按 kind 索引，可空 */
+} RhScrapeMatch;
+
+typedef struct RhScraper {
+  const char *id;
+  unsigned    api_version;                       /* RH_PLUGIN_API_VERSION */
+  gboolean    requires_network;
+  int (*probe)(RhCtx *, RhErr *);                /* 凭证/可达性检查，不联网也可返回可用 */
+  int (*match)(RhCtx *, const RhGame *, const RhScrapeOpts *, RhScrapeMatch **, RhErr *);
+  int (*fetch)(RhCtx *, const RhScrapeMatch *, const char *kind,
+               const char *dest_path, RhErr *);  /* 下载到临时文件，由调用方 copy_atomic 落位 */
+} RhScraper;
+```
+
+`fetch` 只负责拿到临时文件，**落位与入库仍由 `import.c` 的同一套 `rh_fs_copy_atomic` + 单条事务完成**，保证与本地导入同样的幂等语义（0/2/3/1）。
+
+#### 7.5.3 配置与凭证
+
+新增配置键（builtin 默认，均为可选）：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `scrape_enabled` | `false` | 总开关；关闭时任何刮削命令直接返回 0 并提示未启用 |
+| `scrape_providers` | `""` | 按顺序尝试的 id 列表，空 = 不启用 |
+| `scrape_lang` | `""` | 空 = 跟随 `lang` |
+| `scrape_region` | `""` | 空 = 来源默认区域 |
+| `scrape_overwrite` | `false` | `false` = 只补缺，不覆盖已有媒体 |
+| `scrape_timeout` | `30` | 秒 |
+| `scrape_rate_per_min` | `30` | 全局令牌桶上限，来源声明更低时取小 |
+| `scrape_cache_dir` | `""` | 空 = `$XDG_CACHE_HOME/rom-hamster/scrape` |
+
+凭证**不进五层配置**：单独 `~/.config/rom-hamster/secrets.conf`，权限必须 `0600`，加载时校验，过宽则拒绝读取并报错；`--verbose`/日志/错误信息一律脱敏（只打印 key 名，不打印值）。
+
+#### 7.5.4 查询与写回策略（契约）
+
+1. 查询键优先 **crc32 → md5 → sha1**（与 `dat_match_hash` 解耦，刮削总是三选一按来源支持能力发），全无命中才用 `platform + name`，且名称先按 DAT 规范名归一（`game_main_name`），再退原始目录名。
+2. 同一游戏多来源命中时按 `scrape_providers` 顺序取第一个，**不合并字段**（避免来源混搭出无法追溯的记录）。
+3. 媒体写回：`scrape_overwrite=false` 时同 `(game_id,kind)` 已有文件即跳过并计数 `skipped`；`true` 时先写临时文件再原子替换。
+4. 失败语义：单游戏失败只记 `failed` 并继续下一个，**绝不中断整批**；离线/超时按 `max_retry` 退避后放弃。
+5. 缓存：命中响应按 `game_id + source_id` 缓存 `cache_ttl`，缓存命中不发请求；`--refresh` 强制绕过。
+
+#### 7.5.5 来源溯源（schema v2）
+
+`media` 表新增三列（v1 → v2 迁移，默认值兼容旧库）：
+
+| 列 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `source` | TEXT | `'local'` | `local` / `library` / `<scraper id>` |
+| `source_url` | TEXT | `NULL` | 抓取时的查询或详情 URL |
+| `fetched_at` | INTEGER | `NULL` | Unix 秒；本地导入为 NULL |
+
+这样 GUI 能显示"这张封面来自 ScreenScraper"，导出时也能按来源筛选；不引入侧表，避免每次读媒体都要 join。
+
+#### 7.5.6 依赖影响
+
+- **新增 `libcurl`**（`libcurl4`，最低 7.74）。它只被核心库里的 `scraper*.c` 使用，但动态链接后仍是 `rom-hamster` 包的硬依赖；若坚持"纯离线安装不装 curl"，构建期加 `-Dscraper=false` 并在 deb 里拆出 `rom-hamster-scraper`（二选一，M6 动工时拍板）。
+- 不引入 json-glib / libsoup；HTTP 只走 libcurl，JSON 用来源自带的最小解析（或后续单议）。
+- 离线可用性不变：`scrape_enabled=false`（默认）时进程启动与导入路径**不触碰任何网络代码**。
+
 ---
 
 ## 8. 依赖清单
@@ -743,6 +868,7 @@ typedef struct RhImportHandler {
 | `libchdr` | CHD 只读（后续若要识别/校验 CHD） | 仅记录格式字符串 |
 | `chdman`（外部） | CHD 转换 | 不做转换（与 1.0.0 一致） |
 | `unrar`（外部） | RAR5 加密包（libarchive 对部分 RAR5 加密不支持） | 报告该包无法读取，不中断整批导入 |
+| `libcurl4`（**M6 起**） | 刮削的唯一网络栈（§7.5） | M0–M5 不链接；`-Dscraper=false` 时不进依赖 |
 
 对照 1.0.0 `deps.sh`：原本 6 个必装命令（`bash`≥4 / `find` / `coreutils` / `grep` / `sed` / `awk`）+ 7 个建议组件（`zip` `unzip` `7z` `zenity` `python3` `unrar` `xdg-open`），以及 `_dep_pkg` 里按 apt/dnf/pacman/brew/opkg 做的包名映射与 `sudo` 自动装包逻辑 —— 全部消失。运行时依赖变成 5 个 `.so`，由 dpkg 声明。
 
@@ -1018,6 +1144,7 @@ ROM_ROOT = /home/zhoux/roms
 | **M2 导入** | `classify`、`archive`（libarchive）、`job` 作业线程、`dat` 索引、`library` 整库、`import` 编排 | fixtures 的 5 类压缩包（zip/7z/rar/单 ROM/混合）+ PSV 特征包 + 二义扩展名 + 多碟 CD 全部落到正确目录；`kill -9` 后重启能续做且库里无半个条目；该阶段 deb 仍可安装 |
 | **M3 检索/管理/导出** | `query`、`detail`（CLI 纯文本）、`manage`、`export` 模板引擎 + 三份前端规格 | 13 维筛选 + 4 排序键结果与直接 SQL 对齐；导出的 ES-DE / Pegasus 清单能被对应前端正常读取；golden file 逐字节 diff 通过；故意写错的模板在**加载期**报出文件名与行号 |
 | **M4 GUI** | `ui-gtk`、主窗口 `GtkColumnView`、详情页 8 类媒体分页、导入进度/取消、启动游戏、首次运行引导、拖拽导入 | 见下方 §14.1 量化指标；空配置首启能走完"选目录 → 建库 → 主窗口"；拖入目录触发导入并有可见进度；无媒体后端时视频降级为外部打开并提示 |
+| **M6 刮削（可选，M5 之后）** | `data/scrapers/<id>.conf`、`RhScraper` vtable、`scrape` 命令、schema v2 来源列 | 规则文件写错在加载期报文件名与行号；关闭开关时导入不触发任何网络请求；命中媒体带 `source/source_url/fetched_at`；重复刮削不产生重复行；凭证文件权限过宽时拒绝读取、日志不回显密钥 |
 | **M5 打包与发布** | AppStream metainfo（含真实截图）、完整 gettext、CI 矩阵、lintian 全绿、仓库上传 | `dpkg -i` 后 CLI 与 GUI 均可运行；`dpkg -P` 干净卸载无残留；升级时 conffile 保留管理员修改；`appstreamcli validate` 通过；至少 Ubuntu 24.04 与 Debian 13 两个发行版安装验证通过 |
 
 ### 14.1 M4 性能验收（量化）

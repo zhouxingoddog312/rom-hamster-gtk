@@ -1419,6 +1419,26 @@ RhErr rh_import_run(RhCtx *ctx, RhPlatformRules *rules, GPtrArray *inputs,
   if (!rh_fs_mkdir_p(s.rom_root, &ret))
     goto cleanup;
 
+  /* 启动清扫：上次进程被强杀留下的未完成作业，标记为 failed/interrupted，
+   * 避免库里长期挂 queued。续做仍靠重放 + 幂等复制，不做自动跳转。 */
+  {
+    GPtrArray *un = NULL;
+    RhErr je = rh_job_unfinished(ctx, &un);
+
+    if (rh_err_ok(&je) && un) {
+      for (guint i = un->len; i > 0; i--) {
+        RhJob *j = un->pdata[i - 1];
+
+        if (!j || j->id <= 0)
+          continue;
+        rh_log(ctx, RH_LOG_WARN, "上次作业 %" G_GINT64_FORMAT " 未完成，标记为中断",
+               j->id);
+        store_job_update(ctx, j->id, "failed", 0, "interrupted by restart");
+      }
+      g_ptr_array_unref(un);
+    }
+  }
+
   /* 第二阶段：执行（零交互） */
   {
     GPtrArray *jitems = g_ptr_array_new_with_free_func((GDestroyNotify) rh_job_item_free);
