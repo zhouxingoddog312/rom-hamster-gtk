@@ -1,0 +1,4 @@
+option('gui', type: 'boolean', value: true,
+  description: '构建 GTK4 前端 rom-hamster-gui（需要 GTK >= 4.10）')
+option('tests', type: 'boolean', value: true,
+  description: '构建单元测试')

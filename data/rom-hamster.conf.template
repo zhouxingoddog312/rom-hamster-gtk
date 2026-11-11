@@ -1,0 +1,55 @@
+# rom-hamster 配置文件模板
+#
+# 安装后的查找顺序（后者覆盖前者，来源可用 `rom-hamster config --explain KEY` 查看）：
+#   1. 内置默认        （编译进二进制）
+#   2. /usr/share/rom-hamster/rom-hamster.conf   （rom-hamster-data 包，只读）
+#   3. /etc/rom-hamster/rom-hamster.conf         （conffile，系统管理员）
+#   4. ~/.config/rom-hamster/rom-hamster.conf    （用户）
+#   5. 命令行参数
+#
+# 键名与 1.0.0 的 rom-hamster.conf 相同，但新版不会读取旧路径的配置
+# （ARCHITECTURE §10.3）：需要沿用时把内容自行复制到第 4 层。
+
+[default]
+
+# 收藏根目录。首次运行由 GUI 引导选择
+ROM_ROOT =
+
+# DAT 存放目录，留空表示 <ROM_ROOT>/dats
+dat_dir =
+
+# 识别的压缩包后缀
+archive_extensions = .zip;.7z;.rar
+
+# 导出时的压缩格式（zip / 7z）
+archive_compress_export_format = zip
+
+# 同平台重名相似度阈值，0 = 关闭重复检测
+duplicate_check_threshold = 70
+
+# DAT 匹配使用的哈希（crc32 / md5 / sha1）
+dat_match_hash = crc32
+
+# 匹配到单碟后自动关联同一游戏的其他碟
+dat_auto_match_multi_disc = true
+
+# 多碟自动生成 m3u
+auto_generate_m3u = true
+
+# 导出时生成隐藏碟片条目
+export_hidden_discs = true
+
+# 碟片命名前缀（如 "Disc 1"）
+disc_label_prefix = Disc
+
+# 导入成功后删除源文件
+auto_delete_source = false
+
+# 数据库文件，留空表示 <ROM_ROOT>/romhamster.db
+store_path =
+
+# 启动游戏时使用的命令模板（{file} 会被替换为 ROM 路径）
+emulator_launch =
+
+# 界面语言，留空跟随 LANG
+lang =

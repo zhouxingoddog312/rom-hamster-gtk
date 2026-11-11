@@ -1,0 +1,5 @@
+/* 由 meson 生成的编译期路径常量 */
+#pragma once
+
+#define RH_DATADIR    "@DATADIR@"
+#define RH_SYSCONFDIR "@SYSCONFDIR@"

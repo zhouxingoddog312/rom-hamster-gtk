@@ -1,0 +1,10 @@
+/* 由 meson 从 rh-version.h.in 生成，不要手改 */
+#pragma once
+
+#define RH_VERSION            "@RH_VERSION@"
+#define RH_APP_NAME           "@RH_APP_NAME@"
+#define RH_MAINTAINER         "@RH_MAINTAINER@"
+#define RH_MAINTAINER_EMAIL   "@RH_MAINTAINER_EMAIL@"
+#define RH_HOMEPAGE           "@RH_HOMEPAGE@"
+#define RH_LICENSE            "@RH_LICENSE@"
+#define RH_SCHEMA_VERSION     @RH_SCHEMA_VERSION@
