@@ -693,6 +693,57 @@ static void install_drop_target(Gui *g)
                            GTK_EVENT_CONTROLLER(target));
 }
 
+static GtkWidget *DND_SOURCE;
+static GtkWindow *DND_SOURCE_WIN;
+
+/* 真实指针拖拽验收时创建独立源窗口，正常运行时界面不变。 */
+static void install_dnd_source(Gui *g)
+{
+  const char *joined = g_getenv("RH_SMOKE_DND_PATHS");
+  gchar **parts;
+  GPtrArray *files;
+  GdkFileList *list;
+  GdkContentProvider *provider;
+  GtkDragSource *source;
+  GtkWidget *label;
+
+  (void) g;
+  if (!joined || !*joined)
+    return;
+  parts = g_strsplit(joined, G_SEARCHPATH_SEPARATOR_S, 0);
+  files = g_ptr_array_new_with_free_func(g_object_unref);
+  for (guint i = 0; parts[i]; i++) {
+    if (*parts[i])
+      g_ptr_array_add(files, g_file_new_for_path(parts[i]));
+  }
+  if (files->len == 0) {
+    g_ptr_array_unref(files);
+    g_strfreev(parts);
+    return;
+  }
+  list = gdk_file_list_new_from_array((GFile **) files->pdata, files->len);
+  provider = gdk_content_provider_new_typed(GDK_TYPE_FILE_LIST, list);
+  source = gtk_drag_source_new();
+  gtk_drag_source_set_content(source, provider);
+  gtk_drag_source_set_actions(source, GDK_ACTION_COPY);
+  DND_SOURCE_WIN = GTK_WINDOW(gtk_window_new());
+  gtk_window_set_title(DND_SOURCE_WIN, "rh-dnd-source");
+  gtk_window_set_default_size(DND_SOURCE_WIN, 200, 100);
+  gtk_window_set_decorated(DND_SOURCE_WIN, FALSE);
+  label = gtk_label_new("DRAG");
+  gtk_widget_set_size_request(label, 200, 100);
+  gtk_widget_set_hexpand(label, TRUE);
+  gtk_widget_set_vexpand(label, TRUE);
+  gtk_window_set_child(DND_SOURCE_WIN, label);
+  gtk_widget_add_controller(label, GTK_EVENT_CONTROLLER(source));
+  DND_SOURCE = label;
+  gtk_window_present(DND_SOURCE_WIN);
+  g_object_unref(provider);
+  g_boxed_free(GDK_TYPE_FILE_LIST, list);
+  g_ptr_array_unref(files);
+  g_strfreev(parts);
+}
+
 static void on_import_folder_chosen(GObject *source, GAsyncResult *res,
                                     gpointer data)
 {
@@ -946,9 +997,23 @@ static void smoke_drop_paths(Gui *g, const char *joined)
   g_value_set_boxed(&value, list);
   on_drop(NULL, &value, 0, 0, g);
   g_value_unset(&value);
-  g_object_unref(list);
+  g_boxed_free(GDK_TYPE_FILE_LIST, list);
   g_ptr_array_unref(files);
   g_strfreev(parts);
+}
+
+static gboolean smoke_dnd_coords(gpointer data)
+{
+  Gui *g = data;
+  int ww, wh;
+
+  if (!DND_SOURCE)
+    return G_SOURCE_REMOVE;
+  ww = gtk_widget_get_width(GTK_WIDGET(g->win));
+  wh = gtk_widget_get_height(GTK_WIDGET(g->win));
+  g_printerr("smoke: dnd source x=%d y=%d target x=%d y=%d\n",
+             100, 50, ww / 2, wh / 2);
+  return G_SOURCE_REMOVE;
 }
 
 static void on_window_map(GtkWidget *widget, gpointer data)
@@ -982,6 +1047,10 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (expect && g->model &&
       rh_game_list_model_get_count(g->model) != (guint) atoi(expect))
     g_printerr("smoke: expected %s row(s)\n", expect);
+  if (g_getenv("RH_SMOKE_DND_PATHS") && DND_SOURCE) {
+    g_timeout_add(100, smoke_dnd_coords, g);
+    return;
+  }
   if (g_getenv("RH_SMOKE_DROP_PATHS")) {
     smoke_drop_paths(g, g_getenv("RH_SMOKE_DROP_PATHS"));
     return;
@@ -1073,6 +1142,7 @@ static void create_window(Gui *g)
   g_signal_connect(g->win, "map", G_CALLBACK(on_window_map), g);
   g_signal_connect(g->win, "close-request", G_CALLBACK(on_close_request), g);
   install_drop_target(g);
+  install_dnd_source(g);
   g_object_unref(g->detail);   /* stack 已持有；g->detail 仍指向同一个对象 */
   g_object_unref(b);
 }

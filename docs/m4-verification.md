@@ -10,7 +10,7 @@
 | 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
 | 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
-**明确未做**：真实指针拖拽事件的自动化。启动游戏不在本项目范围。缩略图磁盘缓存、拖拽导入与视频后端验证已在本轮补做。
+**明确未做**：导入完成后自动打开详情页、导入历史/失败重试。启动游戏不在本项目范围。缩略图磁盘缓存、拖拽导入、真实指针拖拽自动化与视频后端验证已在本轮补做。
 
 ## 2. 验收结果
 
@@ -147,6 +147,7 @@ bash tools/m4-import-check.sh
 - `bash tools/m4-gui-check.sh`：M4 GUI STEP2: ALL PASS；详情页冷缓存 `cache_hits=0`、热缓存 `cache_hits=1`，缓存文件 1 个。
 - `bash tools/m4-import-check.sh`：M4 IMPORT: ALL PASS。
 - `bash tools/m4-drop-check.sh`：M4 DROP: ALL PASS（两个目录共 100 个文件，rows=100）。
+- `bash tools/m4-dnd-check.sh`（需要 `xdotool` + `twm`）：M4 DND: ALL PASS（真实指针跨窗口拖拽 10 个文件，`planned=10 imported=10 rows=10`）。
 - 新增单测 `/util/cancel`：复制取消返回 4 且目标不存在；解压取消返回 2 且不落文件；`meson test -C build` 5/5 通过。
 
 ### 8.3 取消语义
@@ -168,7 +169,7 @@ bash tools/m4-import-check.sh
 ### 8.5 仍未闭环
 
 1. 真实 `GtkFileDialog` 人机点选仍未自动化；smoke 用 `RH_SMOKE_IMPORT_DIR` 直接走选完目录后的路径。
-2. 真实指针拖拽事件未自动化；smoke 通过 `RH_SMOKE_DROP_PATHS` 构造 `GdkFileList` 并调用同一个 `on_drop`，验证 receiver、路径过滤、多输入导入与进度刷新。导入完成后自动打开详情页、导入历史/失败重试不在本步。
+2. 真实指针拖拽已由 `tools/m4-dnd-check.sh` 覆盖：独立源窗口 + `xdotool` 按住拖动到主窗口释放，走真实 X11 指针与 `GtkDropTarget`。脚本在缺少 `xdotool`/`twm`/`xvfb-run` 时打印 `SKIP`，不伪造 PASS。导入完成后自动打开详情页、导入历史/失败重试不在本步。
 3. 压缩包取消只在单测覆盖“取消返回 2 且不落文件”；GUI 级“解压大包时取消”尚未跑真实大包夹具。
 4. 取消后的已提交条目保留策略已写在本节，但尚未写进 `ARCHITECTURE.md` 的验收口径；需要用户确认是否接受“不回滚整批”。
 
@@ -186,4 +187,12 @@ bash tools/m4-import-check.sh
 
 - 主窗口安装 `GtkDropTarget`，只接收 `GDK_TYPE_FILE_LIST`；`on_drop` 过滤无本地路径的 URI，把多个 `GFile` 转成 `GPtrArray<gchar*>`，复用 `start_import_paths()` / 现有两阶段导入、进度、取消、关闭保护。
 - 文件夹按钮和拖拽走同一个入口；多选时状态栏显示 `Scanning N items`。
-- 验收脚本 `tools/m4-drop-check.sh`：两个目录分别 60 + 40 个 NES，合成 `GdkFileList` 调 `on_drop`，`planned=100 imported=100 rows=100`，进度回调最大 19.3–22.9 ms；未使用真实指针拖拽，脚本注释明确标注。
+- 验收脚本 `tools/m4-drop-check.sh`：两个目录分别 60 + 40 个 NES，合成 `GdkFileList` 调 `on_drop`，`planned=100 imported=100 rows=100`，进度回调最大 19.3–22.9 ms；这条只覆盖接收端与导入管线，不冒充真实指针事件。
+
+真实指针拖拽：
+
+- `tools/m4-dnd-check.sh` 在 Xvfb（`2400x1600x24`）+ `twm` 下启动 GUI；`RH_SMOKE_DND_PATHS` 只创建独立测试源窗口 `rh-dnd-source`，正常运行时该窗口不存在、界面不变。
+- 脚本用 `xdotool` 从源窗口中心按住、分 12 步移动到主窗口中心、释放；事件序列是真实 X11 指针，不是 `GdkFileList` 合成。目标坐标取主窗口实际绝对位置 + 窗口中心，避免无窗口管理器时的错位。
+- 本机命令：`TWM=/home/zhouxin312/twm/root/usr/bin/twm XDOTOOL=/home/zhouxin312/xdt/root/usr/bin/xdotool LD_LIBRARY_PATH=/home/zhouxin312/xdt/root/usr/lib/x86_64-linux-gnu bash tools/m4-dnd-check.sh`。
+- 本机实测：`source=2100,50 target=500,350`，`smoke: import cancelled=0 planned=10 imported=10 ... rows=10`，`M4 DND: ALL PASS`。
+- 依赖缺失时脚本显式打印 `SKIP real pointer drag: xdotool/twm/xvfb-run not found`，由调用方决定是否安装；不会因缺少 GUI 自动化依赖而假通过。
