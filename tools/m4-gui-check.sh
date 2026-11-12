@@ -1,5 +1,5 @@
 #!/bin/bash
-# M4 第一步验收：首次运行（选目录→建库→主窗口）+ 主窗口列表/搜索。
+# M4 验收：首次运行 + 主窗口列表/搜索 + 详情页（元数据、8 组资源、缩略图、返回）。
 # 真实 GtkFileDialog 在无显示器环境无法自动点选，这里用 RH_SMOKE_ROOT 走同一条
 # open_library() 路径；文件选择器本身只做代码审查，不假装已测。
 set -u
@@ -66,10 +66,38 @@ run_gui "$ROOT/cfg-search" "$LIB" 3 "Alpha" 1
 run_gui "$ROOT/cfg-search2" "$LIB" 3 "zzzz" 0
 [ $? -eq 0 ] && ok "search zzzz -> 0 rows" || bad "search zzzz"
 
+echo "=== detail page: metadata + 8 groups + thumbnails + video + back"
+mkdir -p "$LIB/nes/Alpha/videos"
+: > "$LIB/nes/Alpha/videos/Alpha-video.mp4"
+python3 - "$LIB/romhamster.db" <<'PY'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+gid = c.execute("select id from games where name='Alpha'").fetchone()[0]
+c.execute("insert or replace into media(game_id,kind,filename,size,sort)"
+          " values(?,?,?,?,?)", (gid, "videos", "Alpha-video.mp4", 0, 0))
+c.commit()
+PY
+DCFG="$ROOT/cfg-detail"
+rm -rf "$DCFG"
+XDG_CONFIG_HOME="$DCFG" RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$LIB" \
+  RH_SMOKE_EXPECT_ROWS=3 RH_SMOKE_DETAIL=1 RH_SMOKE_BACK=1 \
+  xvfb-run -a "$BIN" >"$ROOT/detail.log" 2>&1
+grep -E "smoke:" "$ROOT/detail.log"
+grep -q "detail pages=8" "$ROOT/detail.log" \
+  && ok "detail has 8 media groups" || bad "detail group count"
+grep -q "thumbs=1/1" "$ROOT/detail.log" \
+  && ok "cover thumbnail decoded" || bad "thumbnail not decoded"
+grep -q "videos=1" "$ROOT/detail.log" \
+  && ok "video widget built" || bad "video widget missing"
+grep -q "back stack=list" "$ROOT/detail.log" \
+  && ok "back returns to list" || bad "back did not return"
+! grep -q "expected" "$ROOT/detail.log" \
+  && ok "detail smoke had no expectation mismatch" || bad "detail expectation mismatch"
+
 echo
 if [ "$FAILED" -eq 0 ]; then
-  echo "M4 GUI STEP1: ALL PASS"
+  echo "M4 GUI STEP2: ALL PASS"
   exit 0
 fi
-echo "M4 GUI STEP1: $FAILED FAILED"
+echo "M4 GUI STEP2: $FAILED FAILED"
 exit 1

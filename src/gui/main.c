@@ -8,6 +8,7 @@
 #include <locale.h>
 #include <stdarg.h>
 
+#include "detail-pane.h"
 #include "game-model.h"
 #include "query.h"
 #include "rh-config.h"
@@ -25,6 +26,7 @@ typedef struct {
   GtkColumnView *list;
   GtkWidget *list_scroll;
   GtkWidget *empty;
+  GtkWidget *detail;
   GtkSingleSelection *selection;
   GtkSearchEntry *search;
   GtkStack *stack;
@@ -177,6 +179,37 @@ static void on_selection_changed(GtkSelectionModel *sel, guint pos,
     set_status(g, "%u game(s)", rh_game_list_model_get_count(g->model));
 }
 
+static void show_detail(Gui *g, guint pos)
+{
+  RhGameRow *row;
+  GListModel *model = gtk_single_selection_get_model(g->selection);
+
+  row = g_list_model_get_item(model, pos);
+  if (!row)
+    return;
+  detail_pane_show(g->detail, rh_game_row_id(row));
+  gtk_stack_set_visible_child_name(g->stack, "detail");
+  set_status(g, "Showing %s", rh_game_row_name(row));
+  g_object_unref(row);
+}
+
+static void on_row_activated(GtkColumnView *list, guint pos, gpointer data)
+{
+  Gui *g = data;
+  (void) list;
+  show_detail(g, pos);
+}
+
+static void on_detail_back(GtkButton *btn, gpointer data)
+{
+  Gui *g = data;
+  guint n = rh_game_list_model_get_count(g->model);
+
+  (void) btn;
+  gtk_stack_set_visible_child_name(g->stack, n ? "list" : "empty");
+  set_status(g, "%u game(s)", n);
+}
+
 /* --------------------------------------------------------------- 打开库 */
 
 static gboolean open_library(Gui *g, const char *root)
@@ -276,6 +309,24 @@ static gboolean smoke_after_search(gpointer data)
   return G_SOURCE_REMOVE;
 }
 
+static gboolean smoke_detail_done(gpointer data)
+{
+  Gui *g = data;
+
+  g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u videos=%u\n",
+             detail_pane_page_count(g->detail), detail_pane_title(g->detail),
+             detail_pane_thumbs_loaded(g->detail),
+             detail_pane_thumbs_started(g->detail),
+             detail_pane_video_count(g->detail));
+  if (g_getenv("RH_SMOKE_BACK")) {
+    g_signal_emit_by_name(detail_pane_back_button(g->detail), "clicked");
+    g_printerr("smoke: back stack=%s\n",
+               gtk_stack_get_visible_child_name(g->stack));
+  }
+  g_application_quit(G_APPLICATION(g->app));
+  return G_SOURCE_REMOVE;
+}
+
 static void on_window_map(GtkWidget *widget, gpointer data)
 {
   Gui *g = data;
@@ -295,6 +346,12 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (kw && *kw) {
     gtk_editable_set_text(GTK_EDITABLE(g->search), kw);
     g_timeout_add(500, smoke_after_search, g);
+    return;
+  }
+  if (g_getenv("RH_SMOKE_DETAIL") && g->model &&
+      rh_game_list_model_get_count(g->model) > 0) {
+    show_detail(g, 0);
+    g_timeout_add(1200, smoke_detail_done, g);
     return;
   }
   g_application_quit(G_APPLICATION(g->app));
@@ -329,7 +386,13 @@ static void create_window(Gui *g)
   g_signal_connect(btn_rescan, "clicked", G_CALLBACK(on_refresh), g);
   g_signal_connect(g->selection, "selection-changed",
                    G_CALLBACK(on_selection_changed), g);
+  g->detail = detail_pane_new(g->ctx);
+  gtk_stack_add_titled(g->stack, g->detail, "detail", "Detail");
+  g_signal_connect(detail_pane_back_button(g->detail), "clicked",
+                   G_CALLBACK(on_detail_back), g);
+  g_signal_connect(g->list, "activate", G_CALLBACK(on_row_activated), g);
   g_signal_connect(g->win, "map", G_CALLBACK(on_window_map), g);
+  g_object_unref(g->detail);   /* stack 已持有；g->detail 仍指向同一个对象 */
   g_object_unref(b);
 }
 

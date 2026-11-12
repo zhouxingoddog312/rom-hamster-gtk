@@ -38,8 +38,27 @@ A=$(id_of Alpha); B=$(id_of Beta); G=$(id_of Gamma)
 mkdir -p "$ROOT/lib/nes/Alpha/covers" "$ROOT/lib/nes/Beta/screenshots"
 mkdir -p "$ROOT/lib/nes/Beta/rom"
 printf two > "$ROOT/lib/nes/Beta/rom/Beta (Disc 2).nes"
-printf 'png-alpha' > "$ROOT/lib/nes/Alpha/covers/Alpha-image.png"
-printf 'png-beta'  > "$ROOT/lib/nes/Beta/screenshots/Beta-thumb.png"
+# 真实可解码的 PNG（400x300 纯色），GUI 缩略图路径才有东西可测。
+python3 - "$ROOT/lib/nes/Alpha/covers/Alpha-image.png" \
+         "$ROOT/lib/nes/Beta/screenshots/Beta-thumb.png" <<'PY'
+import struct, sys, zlib
+
+def chunk(tag, data):
+    return (struct.pack(">I", len(data)) + tag + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff))
+
+def png(path, rgb):
+    w = h = 400
+    raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+    out = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9))
+           + chunk(b"IEND", b""))
+    open(path, "wb").write(out)
+
+png(sys.argv[1], (200, 40, 40))
+png(sys.argv[2], (40, 80, 200))
+PY
 printf 'Beta.nes\nBeta (Disc 2).nes\n' > "$ROOT/lib/nes/Beta/rom/Beta.m3u"
 
 # Beta 标成双碟并补一条 rom 行，用来验 --multi / --single / --sort discs。

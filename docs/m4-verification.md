@@ -1,19 +1,16 @@
-# M4 验收记录（第一步）：首次运行 + 主窗口列表/搜索
+# M4 验收记录：首次运行 + 主窗口 + 详情页
 
-日期：2026-11-11　基线：`ae16ec7`（M3）
+日期：2026-11-12　基线：`ae16ec7`（M3）
 
-## 1. 本次落地范围
+## 1. 两步的范围
 
-| 项 | 内容 |
+| 步 | 内容 |
 |---|---|
-| 首次运行 | 启动建 `RhCtx`；`ROM_ROOT` 为空则弹 `GtkFileDialog` 选目录；选完写用户配置、建库，直接进主窗口，无欢迎页 |
-| 配置保存 | 新增 `rh_config_save_user_key()`：原位替换 `ROM_ROOT`，保留其他键与注释，原子写 |
-| 主窗口 | `.ui` + `GResource` 编译进二进制；`GtkColumnView` 五列（名称/平台/年份/题材/评分） |
-| 列表模型 | `RhGameListModel` 实现 `GListModel`，只复制行展示所需字段，不复制描述 |
-| 搜索 | 搜索框 200 ms 防抖，走 `rh_query_list()`（与 CLI 同一条查询，不新增 SQL） |
-| 测试旁路 | `RH_SMOKE_ROOT` 走同一条 `open_library()` 路径，供无显示器环境验收；真实文件选择器不做自动化 |
+| 1 | 首次运行弹 `GtkFileDialog` 选 `ROM_ROOT`；写用户配置、建库、直接进主窗口；`GtkColumnView` 五列；搜索 200 ms 防抖走 `rh_query_list()` |
+| 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
+| 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
-**明确未做**：详情页、8 类媒体分页、缩略图缓存、拖拽导入、导入进度/取消、启动游戏。这些是 M4 后续步骤。
+**明确未做**：缩略图磁盘缓存、拖拽导入、导入进度/取消、启动游戏、10k 条性能指标、真实视频后端的播放验证。
 
 ## 2. 验收结果
 
@@ -22,18 +19,25 @@
 ```
 build                  PASS  ninja -C build-gui
 核心库                 PASS  ldd libromham 无 gtk/gdk/pango
-unit tests             PASS  meson test 6 suites（含 config-save）
-fixture                PASS  3 games
+unit tests             PASS  meson test 6 suites
+fixture                PASS  3 games（Alpha 封面为真实 400x400 PNG）
 首次运行空目录         PASS  窗口 map、0 行、romhamster.db 已建、ROM_ROOT 已写
 已有库                 PASS  3 行
 搜索 Alpha             PASS  1 行
 搜索 zzzz              PASS  0 行
-M4 GUI STEP1: ALL PASS
+详情页                 PASS  pages=8 title=Alpha · nes · 1990 thumbs=1/1 videos=1
+返回                   PASS  back stack=list
+M4 GUI STEP2: ALL PASS
 ```
 
-deb 回归：`SKIP_DEB=0 bash tools/m2-check.sh` → 43/43，三 deb 构建成功；解包后的 `rom-hamster-gui` 在 xvfb 下加载 3 行（证明 `.ui` 资源已编进包）。M3 回归 `SKIP_DEB=1 bash tools/m3-check.sh` 全绿。
+补充验证：
 
-## 3. 本步修掉的真实缺陷
+- AddressSanitizer 构建 `build-gui-asan` 跑详情页 + 返回，无 ASAN 报错。ASAN 下 1.2 s 内缩略图未完成（`thumbs=0/1`），属测试等待时间不足，普通构建为 `1/1`。
+- `SKIP_DEB=0 bash tools/m2-check.sh` → 43/43，三 deb 构建成功。
+- `SKIP_DEB=1 bash tools/m3-check.sh` 全绿。
+- 解包 deb 后 `rom-hamster-gui` 在 xvfb 下进入详情页，8 组、缩略图 1/1、返回列表均正常（证明 `.ui` 资源确已进包）。
+
+## 3. 第一步修掉的缺陷
 
 | # | 缺陷 | 发现方式 | 修法 |
 |---|---|---|---|
@@ -43,9 +47,32 @@ deb 回归：`SKIP_DEB=0 bash tools/m2-check.sh` → 43/43，三 deb 构建成�
 | 4 | `GtkSearchEntry::search-changed` 在程序化 `gtk_editable_set_text()` 时不触发，搜索用例不更新 | smoke 搜索 2 行不变 | 改接 `GtkEditable::changed` + 仍保留 200 ms 防抖 |
 | 5 | GUI 链接私有 soname `libromham-1.0.so`，`dpkg-shlibdeps` 找不到 shlibs 信息，deb 构建失败 | `SKIP_DEB=0` 回归 | `debian/rules` 覆盖 `dh_shlibdeps -- --ignore-missing-info`；GUI 已显式 `Depends: rom-hamster (= ${binary:Version})` |
 
-## 4. 已知未闭环
+## 4. 第二步修掉的缺陷
 
-1. 真实 `GtkFileDialog` 的人机点选没有自动化；测试只覆盖其后的 `open_library()` 路径。
-2. 列表尚未接排序表头、筛选侧栏；当前固定 `sort=name`。
-3. 10k 条性能指标（冷启动、首屏 300 ms、滚动 p95、搜索 200 ms）尚未测，属 M4 性能验收，不能拿 3 条夹具冒充。
-4. 详情页与媒体分页未开始。
+| # | 缺陷 | 发现方式 | 修法 |
+|---|---|---|---|
+| 1 | `detail_pane_new()` 把 builder 的借用对象直接返回，`g_object_unref(builder)` 后根窗口被销毁；主窗口拿到悬空指针，`GTK_IS_WIDGET=0`，`gtk_stack_add_titled` 断言失败并段错误 | 详情页 smoke 立即崩溃；打印指针/类型确认 | 返回前 `g_object_ref(root)`；主窗口加入 stack 后 `g_object_unref` 自己那份 |
+| 2 | `gtk_stack_add_titled()` 按 GTK4 签名传了多余的 `NULL`，编译失败 | 首次编译 | 改为 3 个参数 |
+| 3 | `gtk_text_view_set_margin_start/end/top/bottom` 不存在 | 编译失败 | 改用 `gtk_text_view_set_left/right/top/bottom_margin` |
+| 4 | 夹具里的 PNG 缺 chunk length、后补又缺每行 filter byte，缩略图解码报 `Unknown filter method 200` | `thumbs=0/1` + 打印解码错误 | 修正 fixture 的 PNG 生成；`tools/m3-fixture.sh` 现生成真实 400x400 PNG |
+| 5 | 缩略图回调保存裸 `DetailPane*`，窗口先销毁时可能 UAF | 代码审查 | 改为 `GWeakRef` 持有详情根窗口；窗口没了就不计数、不碰 `dp` |
+| 6 | smoke 在 `show_detail()` 后立刻打印 `thumbs`，异步解码还没回来，误报 0 | 测试输出顺序 | smoke 延迟 1.2 s 再打印并退出 |
+
+已知未消除的编译警告：`gdk_texture_new_for_pixbuf` 在 GTK 4.22 标记 deprecated。当前基线 GTK 4.10 仍可用，暂保留，未改用 `gdk_memory_texture_new`（后者需要处理 pixbuf 的 RGB/RGBA 格式差异）。
+
+## 5. 详情页实现要点
+
+- 元数据字段：Platform / Year / Genre / Developer / Publisher / Region / Players / Rating / Status / Format / Multi-disc / Patch / DAT / Directory，值可选中复制。
+- 资源组固定顺序：`rom`、`covers`、`screenshots`、`videos`、`marquees`、`miximages`、`intro`、`patcher`，与 `rh_detail_group_kind()` 一致，不重复实现目录规则。
+- 图片在 `GTask` 线程池里用 `gdk_pixbuf_new_from_file_at_scale(400,300)` 解码，主线程只做 `GdkTexture` 绑定；UI 不等待磁盘。
+- 视频用 `GtkVideo` 内嵌，旁边常驻 “Open externally” 按钮；无媒体后端时用户仍可外部打开，界面有提示。
+- 描述是只读 `GtkTextView`，换行按 `WORD_CHAR`，不解释标记、不做富文本。
+- 文件缺失在图片页和文件页都标 `(missing)`，不隐藏。
+
+## 6. 仍未闭环
+
+1. 缩略图缓存（`$XDG_CACHE_HOME/rom-hamster/thumbs/`，键 = 路径 + mtime + 尺寸）未做；当前每次进详情页重新解码。
+2. `GtkVideo` 只验证了控件构建，未在真实带 GStreamer 后端的桌面验证播放/暂停/无后端降级流程。
+3. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
+4. 10k 条性能指标仍未测；详情页冷读耗时也未计时。
+5. 真实 `GtkFileDialog` 人机点选仍未自动化。

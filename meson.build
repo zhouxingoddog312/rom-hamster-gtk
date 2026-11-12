@@ -96,7 +96,7 @@ if get_option('gui')
     'src/gui/rom-hamster-gui.gresource.xml',
     source_dir : 'src/gui',
     c_name : 'rom_hamster_gui')
-  gui_sources = files('src/gui/main.c', 'src/gui/game-model.c') + gui_resources
+  gui_sources = files('src/gui/main.c', 'src/gui/game-model.c', 'src/gui/detail-pane.c') + gui_resources
   executable('rom-hamster-gui',
     gui_sources,
     dependencies : [libromham_dep, gtk_dep],

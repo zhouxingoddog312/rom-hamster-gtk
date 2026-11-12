@@ -2,5 +2,6 @@
 <gresources>
   <gresource prefix="/io/github/goddog312/RomHamster">
     <file preprocess="xml-stripblanks">ui/main-window.ui</file>
+    <file preprocess="xml-stripblanks">ui/detail-pane.ui</file>
   </gresource>
 </gresources>
