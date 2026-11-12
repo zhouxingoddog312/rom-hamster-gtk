@@ -67,6 +67,7 @@ M4 GUI STEP2: ALL PASS
 - 资源组固定顺序：`rom`、`covers`、`screenshots`、`videos`、`marquees`、`miximages`、`intro`、`patcher`，与 `rh_detail_group_kind()` 一致，不重复实现目录规则。
 - 图片在 `GTask` 线程池里先查磁盘缓存，再决定解码原图还是读缓存；主线程只做 `GdkTexture` 绑定；UI 不等待磁盘。
 - 缩略图缓存目录 `$XDG_CACHE_HOME/rom-hamster/thumbs/`，文件名是 `SHA1(路径 + size + mtime)`，内容是 400×300 PNG；先写 `.thumb.XXXXXX` 再 `rename`，不产生半张图。缓存键不含纳秒（`GStatBuf` 在该构建下没有 `st_mtim` 字段），同一秒内改图且 size 不变的极端情况会命中旧图，属于已知取舍。
+- 缓存容量默认 256 MiB，按 mtime 从旧到新淘汰，直到目录总量不超过上限；第一次缓存写入触发一次检查，之后每 64 次写入检查一次，避免每张图都扫目录。`RH_THUMB_CACHE_MB` 可改上限，`0` 关闭上限（仅测试/排障用）。
 - 视频用 `GtkVideo` 内嵌，旁边常驻 “Open externally” 按钮。构建前用 `GModule` 动态查询 GStreamer 的 `playbin3`；缺失时完全不创建媒体流，直接显示 “No inline media backend; use Open externally.”，避免 `GstPlay` 的 `g_error()` 终止进程。`GtkMediaStream` 的 `error` 属性也会触发降级：隐藏视频、显示具体错误、保留外部打开。没有给 GUI 增加 GStreamer 编译依赖。
 - 验收同时覆盖三种状态：有效 `tests/fixtures/video/sample.ogv`（6 KB Ogg/Theora）能 prepared 并进入 playing；0 字节 `Alpha-video.mp4` 进入 error 降级；`GST_PLUGIN_SYSTEM_PATH=/nonexistent` 模拟后端不可用时两个视频全部降级且进程不 abort。
 - 描述是只读 `GtkTextView`，换行按 `WORD_CHAR`，不解释标记、不做富文本。
@@ -74,7 +75,7 @@ M4 GUI STEP2: ALL PASS
 
 ## 6. 仍未闭环
 
-1. 缩略图缓存没有容量上限/过期清理策略；当前只保证原子写与缓存命中，不做 LRU 或按大小回收。缓存损坏时会回退解码原图并覆盖。
+1. 缩略图缓存已加容量上限：默认 256 MiB，按 mtime LRU 淘汰，`tools/m4-cache-check.sh` 覆盖。缓存损坏仍回退解码原图并覆盖；没有按时间 TTL 清理，但容量已有上界。
 2. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
 3. 参考机型（4 核 / 16 GB / SATA SSD / 1920×1080 / GTK 4.16）上的首屏与 10 s 滚动帧率仍未复测；本机 WSL2 的软件渲染数字只作基线记录。
 4. 真实 `GtkFileDialog` 人机点选仍未自动化。
@@ -147,6 +148,7 @@ bash tools/m4-import-check.sh
 - `bash tools/m4-gui-check.sh`：M4 GUI STEP2: ALL PASS；详情页冷缓存 `cache_hits=0`、热缓存 `cache_hits=1`，缓存文件 1 个。
 - `bash tools/m4-import-check.sh`：M4 IMPORT: ALL PASS。
 - `bash tools/m4-drop-check.sh`：M4 DROP: ALL PASS（两个目录共 100 个文件，rows=100）。
+- `bash tools/m4-cache-check.sh`：M4 CACHE: ALL PASS（预置 5 × 1 MiB 旧缓存，上限 2 MiB，首次写入后剩 2 个文件 / 1032 KB，最旧 4 个被淘汰）。
 - `bash tools/m4-dnd-check.sh`（需要 `xdotool` + `twm`）：M4 DND: ALL PASS（真实指针跨窗口拖拽 10 个文件，`planned=10 imported=10 rows=10`）。
 - 新增单测 `/util/cancel`：复制取消返回 4 且目标不存在；解压取消返回 2 且不落文件；`meson test -C build` 5/5 通过。
 
@@ -165,6 +167,7 @@ bash tools/m4-import-check.sh
 | 2 | `rh_ctx_set_ui()` 保存指向块作用域复合字面量 `&(RhUi){...}` 的指针，函数返回后悬空；进度回调会 UAF | 代码审查（在导入 smoke 前修掉） | 改为文件级 `static RhUi GUI_UI`，每次启动设置 `userdata` |
 | 3 | `ui_max_gap` 把首帧绘制时间算进“进度刷新间隔”，800 文件误报 425.6 ms | `m4-import-check.sh` 首次运行 | 首次 UI 更新单独记 `first_ui_ms`，从第二次起统计 `ui_max_gap` |
 | 4 | 平台规则为空时导入静默全跳过 | 开发树无 `/usr/local/share/rom-hamster/platforms.conf` | 规则数为 0 直接返回 `RH_ERR_CONFIG`，提示安装 data 包或设 `RH_PLATFORMS` |
+| 5 | 有效 Ogg 进入 `playing`，但 `video_ready=0`：`notify::prepared` 在信号连接前已发生或未按序投递 | `m4-gui-check` 偶发 1 FAIL | 新增 `mark_video_ready()`；`playing` 时补记 ready；修后连续 3 次 GUI 检查均 `video_ready=1 video_playing=1` |
 
 ### 8.5 仍未闭环
 
@@ -182,6 +185,8 @@ bash tools/m4-import-check.sh
 - `DetailPane` 增加 `thumb_generation`：详情页重新 `show` 时旧任务的结果直接丢弃，避免旧缩略图计数/绘制污染新详情页；`thumbs_*` 计数每次 `show` 清零。
 - 测试：同一 `XDG_CACHE_HOME` 连续两次进入 Alpha 详情。冷启动 `cache_hits=0`，`thumb_load_ms=61–63 ms`；热启动 `cache_hits=1`，`thumb_load_ms=25–29 ms`（本机 WSL2 单次值，仅作缓存路径生效的证据，不作为性能阈值）。缓存文件数 1。
 - `RH_PERF=1` 时 `perf: first_thumb_ms=... thumb_load_ms=... cache_hit=...` 可用于后续基线；`first_thumb_ms` 含 UI 调度噪声，判缓存是否生效看 `cache_hit`。
+- 容量清理：默认 256 MiB；按 mtime 从旧到新删除，直到总量 ≤ 上限。第一次写入触发，之后每 64 次写入触发；`g_mutex_trylock` 保证同一时刻只有一个清理在跑。`RH_THUMB_CACHE_MB` 可覆盖上限，`0` 关闭清理。
+- `tools/m4-cache-check.sh`：预置 5 个 1 MiB 旧缓存（`old01` 最旧、`old05` 最新），设 `RH_THUMB_CACHE_MB=2`，打开 Alpha 详情产生一次新写入。结果 `old01..old04` 被删、`old05` 保留、新缩略图存在，目录从 5124 KB 降到 1032 KB。
 
 拖拽：
 

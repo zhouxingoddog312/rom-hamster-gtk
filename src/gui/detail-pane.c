@@ -3,6 +3,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib/gstdio.h>
 #include <gmodule.h>
+#include <sys/stat.h>
 
 #include "detail.h"
 
@@ -40,6 +41,15 @@ typedef struct {
   guint       generation;
 } ThumbDone;
 
+typedef struct {
+  gchar   *path;
+  goffset  size;
+  gint64   mtime;
+} ThumbCacheEntry;
+
+static GMutex thumb_cleanup_mutex;
+static gint thumb_cache_writes;
+
 static void thumb_job_free(gpointer data)
 {
   ThumbJob *j = data;
@@ -56,6 +66,108 @@ static void thumb_result_free(gpointer data)
   if (r->pb)
     g_object_unref(r->pb);
   g_free(r);
+}
+
+/* 默认 256 MiB；RH_THUMB_CACHE_MB=0 关闭上限（测试与排障用）。 */
+static gint64 thumb_cache_limit_bytes(void)
+{
+  const char *env = g_getenv("RH_THUMB_CACHE_MB");
+  gint64 mb;
+  gchar *end = NULL;
+
+  if (!env || !*env)
+    return (gint64) 256 * 1024 * 1024;
+  mb = g_ascii_strtoll(env, &end, 10);
+  if (mb < 0 || !end || *end != '\0')
+    return (gint64) 256 * 1024 * 1024;
+  return mb * 1024 * 1024;
+}
+
+static gint thumb_cache_entry_cmp(gconstpointer a, gconstpointer b)
+{
+  const ThumbCacheEntry *x = a;
+  const ThumbCacheEntry *y = b;
+
+  if (x->mtime != y->mtime)
+    return x->mtime < y->mtime ? -1 : 1;
+  return g_strcmp0(x->path, y->path);
+}
+
+static void thumb_cache_entries_free(GArray *entries)
+{
+  for (guint i = 0; i < entries->len; i++) {
+    ThumbCacheEntry *e = &g_array_index(entries, ThumbCacheEntry, i);
+
+    g_free(e->path);
+  }
+  g_array_free(entries, TRUE);
+}
+
+/* 按 mtime 从旧到新删除，直到目录总量不超过上限；只处理 *.png。 */
+static void thumb_cache_prune(const gchar *cache_dir)
+{
+  GDir *d;
+  GArray *entries;
+  goffset total = 0;
+  const gchar *name;
+  gint64 limit = thumb_cache_limit_bytes();
+
+  if (limit <= 0)
+    return;
+  if (!g_mutex_trylock(&thumb_cleanup_mutex))
+    return;
+
+  d = g_dir_open(cache_dir, 0, NULL);
+  if (!d) {
+    g_mutex_unlock(&thumb_cleanup_mutex);
+    return;
+  }
+
+  entries = g_array_new(FALSE, FALSE, sizeof(ThumbCacheEntry));
+  while ((name = g_dir_read_name(d)) != NULL) {
+    GStatBuf st;
+    gchar *path;
+    ThumbCacheEntry e;
+
+    if (name[0] == '.' || !g_str_has_suffix(name, ".png"))
+      continue;
+    path = g_build_filename(cache_dir, name, NULL);
+    if (g_stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+      g_free(path);
+      continue;
+    }
+    e.path = path;
+    e.size = st.st_size;
+    e.mtime = st.st_mtime;
+    g_array_append_val(entries, e);
+    total += e.size;
+  }
+  g_dir_close(d);
+
+  if (total > limit && entries->len > 0) {
+    g_array_sort(entries, thumb_cache_entry_cmp);
+    for (guint i = 0; i < entries->len && total > limit; i++) {
+      ThumbCacheEntry *e = &g_array_index(entries, ThumbCacheEntry, i);
+
+      if (g_unlink(e->path) == 0)
+        total -= e->size;
+    }
+  }
+  thumb_cache_entries_free(entries);
+  g_mutex_unlock(&thumb_cleanup_mutex);
+}
+
+static void thumb_cache_after_write(const gchar *cache_path)
+{
+  gint n = g_atomic_int_add(&thumb_cache_writes, 1) + 1;
+
+  /* 第一次写入立即清一次；之后每 64 次写入检查，避免每张图都扫目录。 */
+  if (n == 1 || (n % 64) == 0) {
+    gchar *dir = g_path_get_dirname(cache_path);
+
+    thumb_cache_prune(dir);
+    g_free(dir);
+  }
 }
 
 /* 缓存键 = 路径 + 源文件 size + mtime（秒级），避免改图后命中旧缩略图。 */
@@ -105,6 +217,8 @@ static gboolean thumb_cache_write(const char *cache_path, GdkPixbuf *pb)
   g_clear_error(&err);
   if (!ok)
     g_unlink(tmp);
+  else
+    thumb_cache_after_write(cache_path);
 
 done:
   g_free(tmp);
@@ -400,19 +514,11 @@ static void degrade_video(VideoProbe *vp, const GError *err)
   }
 }
 
-static void on_video_notify(GObject *obj, GParamSpec *pspec, gpointer data)
+static void mark_video_ready(VideoProbe *vp)
 {
-  VideoProbe *vp = data;
-  GtkMediaStream *stream = GTK_MEDIA_STREAM(obj);
-  const GError *err = gtk_media_stream_get_error(stream);
   DetailPane *dp;
 
-  (void) pspec;
-  if (err) {
-    degrade_video(vp, err);
-    return;
-  }
-  if (!vp || vp->ready || !gtk_media_stream_is_prepared(stream))
+  if (!vp || vp->ready || vp->degraded)
     return;
   vp->ready = TRUE;
   if (vp->root) {
@@ -424,6 +530,22 @@ static void on_video_notify(GObject *obj, GParamSpec *pspec, gpointer data)
     gtk_label_set_text(vp->hint, "Inline playback ready.");
 }
 
+static void on_video_notify(GObject *obj, GParamSpec *pspec, gpointer data)
+{
+  VideoProbe *vp = data;
+  GtkMediaStream *stream = GTK_MEDIA_STREAM(obj);
+  const GError *err = gtk_media_stream_get_error(stream);
+
+  (void) pspec;
+  if (err) {
+    degrade_video(vp, err);
+    return;
+  }
+  if (!vp || !gtk_media_stream_is_prepared(stream))
+    return;
+  mark_video_ready(vp);
+}
+
 static void on_video_playing(GObject *obj, GParamSpec *pspec, gpointer data)
 {
   VideoProbe *vp = data;
@@ -432,6 +554,9 @@ static void on_video_playing(GObject *obj, GParamSpec *pspec, gpointer data)
   (void) pspec;
   if (!vp || vp->played || !gtk_media_stream_get_playing(GTK_MEDIA_STREAM(obj)))
     return;
+  /* 极端情况下 prepared 的 notify 可能先于信号连接发生，playing 是更强的
+   * “已准备好”证据；补记一次，避免 smoke 计数随事件顺序抖动。 */
+  mark_video_ready(vp);
   vp->played = TRUE;
   if (vp->root) {
     dp = g_object_get_data(G_OBJECT(vp->root), "dp");
