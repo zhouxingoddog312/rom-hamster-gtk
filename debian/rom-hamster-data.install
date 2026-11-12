@@ -1,4 +1,3 @@
 usr/share/rom-hamster/platforms.conf
-usr/share/rom-hamster/emulators.conf
 usr/share/rom-hamster/frontends/*
 usr/share/rom-hamster/rom-hamster.conf.template

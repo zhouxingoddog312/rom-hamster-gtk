@@ -29,7 +29,7 @@ fi
 
 echo "=== unit tests"
 meson test -C build --print-errorlogs >"$ROOT/unit.log" 2>&1
-if [ $? -eq 0 ]; then ok "meson test (6 suites incl config-save)"; else bad "meson test"; tail -20 "$ROOT/unit.log"; fi
+if [ $? -eq 0 ]; then ok "meson test (5 suites incl config-save)"; else bad "meson test"; tail -20 "$ROOT/unit.log"; fi
 
 echo "=== fixture"
 bash tools/m3-fixture.sh >/dev/null 2>&1

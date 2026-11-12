@@ -48,8 +48,7 @@ auto_delete_source = false
 # 数据库文件，留空表示 <ROM_ROOT>/romhamster.db
 store_path =
 
-# 全局兜底启动命令模板（%ROM% = ROM 绝对路径，%DIR% = 游戏目录）
-# 平台专用模板优先读 emulators.conf；这里为空时只用 emulators.conf
+# 启动游戏时使用的命令模板（{file} 会被替换为 ROM 路径）
 emulator_launch =
 
 # 界面语言，留空跟随 LANG
