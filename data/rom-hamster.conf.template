@@ -48,7 +48,7 @@ auto_delete_source = false
 # 数据库文件，留空表示 <ROM_ROOT>/romhamster.db
 store_path =
 
-# 启动游戏时使用的命令模板（{file} 会被替换为 ROM 路径）
+# 前端规格 `launch` 字段的命令模板（{file} 会被替换为 ROM 路径）；本程序不启动模拟器
 emulator_launch =
 
 # 界面语言，留空跟随 LANG

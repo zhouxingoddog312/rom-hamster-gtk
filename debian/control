@@ -39,8 +39,7 @@ Recommends: gstreamer1.0-plugins-base,
 Description: retro game ROM library manager (GTK 4 graphical front-end)
  Graphical front-end for rom-hamster. It provides a list view of the library,
  a detail page showing metadata and media (covers, screenshots, videos,
- marquees), import progress with cancellation, and launching a game with the
- configured emulator.
+ marquees), import progress with cancellation, and frontend manifest export.
  .
  It links against the same core library as the command line front-end and
  does not duplicate any storage or rule logic.

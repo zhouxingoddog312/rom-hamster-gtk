@@ -77,6 +77,6 @@
 
 - CLI 目前只有 `--version` 与 `config`；`store_*` 与 `platform_*` 尚无命令入口（M2 导入时接上）。
 - `debian/` 没有 `rom-hamster-data` 之外的图标/`.desktop`/AppStream（M5）。
-- 没有 `emulators.conf`（模拟器启动在 M4）。
+- 不包含模拟器启动配置或启动功能。
 - `docs/rules-verification.md` §5 的 5 条存疑项（街机 `.7z` 直存、psvita `.vpk` 等）需要 M2 真实导入验证。
 - 首个 tag 待本次提交后打 `v0.1.0-M1`。

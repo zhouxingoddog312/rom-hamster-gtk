@@ -103,7 +103,6 @@ c与gtk/
 ├─ ARCHITECTURE.md            # 本文
 ├─ data/
 │  ├─ platforms.conf          # 101 平台规则，格式原样继承
-│  ├─ emulators.conf          # 新增：模拟器启动命令模板
 │  ├─ frontends/
 │  │  ├─ es.conf              # 每份"前端规格"同时描述导入与导出：
 │  │  ├─ esde.conf            #   [export.*] 排版模板 + [import] 字段映射
@@ -582,7 +581,6 @@ typedef struct RhUi {
 | 扩展点 | 载体 | 说明 |
 |---|---|---|
 | 平台规则 | `platforms.conf` | 格式原样继承。现格式为"首段后缀表 + `key=value` 键值对"（`nes:.nes;.unf;.fds;compress_supported=true;recommended_format=zip;…`），**新增属性不需要改解析器**（未知键被忽略），因此它已经是数据驱动，无需模板引擎。建议给段头加 `spec_version`，格式变化时明确报错而不是静默读错 |
-| 模拟器启动 | `emulators.conf`（新增） | `平台ID:命令模板`，占位符 `%ROM%` `%DIR%`；供 GUI 的"启动游戏"按钮与 CLI `rom-hamster run <id>` 使用 |
 | 前端规格 | `data/frontends/<id>.conf` | 一份文件同时定义该前端的**导入字段映射**与**导出排版模板**（§7.2）；用户可放 `~/.config/rom-hamster/frontends/` 覆盖，优先级与配置一致 |
 | 导出选项 | `export` 配置段 | 目录、是否带媒体、是否压缩、是否生成 m3u |
 
@@ -660,7 +658,7 @@ Pegasus 那份用 `format = lines` + `record = game:` + `field.name = name`（�
 
 - 游戏：`id name game_main_name platform platform_export_name description description_line developer publisher year genre players rating rating_norm releasedate_es region tags disc_no is_multi_disc is_arcade rom_status rom_format dat_source patch_type`
 - 路径：`rom_file rom_rel rom_size cover_rel screenshot_rel marquee_rel video_rel miximage_rel intro_rel patcher_rel`
-- 上下文：`export_dir platform_dir platform_name media_dir game_name platform_extensions emulator_launch`
+- 上下文：`export_dir platform_dir platform_name media_dir game_name platform_extensions emulator_launch`（`emulator_launch` 仅用于前端规格 `launch` 字段；本项目不启动模拟器）
 
 `rating_norm`（10 分制 → 0.0–1.0）、`releasedate_es`（→ `YYYYMMDDT000000`）、`description_line`（压掉换行）都是**代码算好的派生变量**：模板语法里没有算术与字符串函数，这类换算只能在代码里做。
 
@@ -968,7 +966,7 @@ Entware 的 `x64-k3.2` 包索引里，本项目需要的库全部存在：
 
 | 包 | 内容 | 依赖 |
 |---|---|---|
-| `rom-hamster` | `/usr/bin/rom-hamster`（CLI）、`/usr/lib/x86_64-linux-gnu/rom-hamster/libromham-1.0.so`、`/etc/rom-hamster/rom-hamster.conf`、`/etc/rom-hamster/platforms.conf`、`/etc/rom-hamster/emulators.conf`、man page | `libglib2.0-0`, `libsqlite3-0`, `libarchive13`, `zlib1g`, `libxml2` |
+| `rom-hamster` | `/usr/bin/rom-hamster`（CLI）、`/usr/lib/x86_64-linux-gnu/rom-hamster/libromham-1.0.so`、`/etc/rom-hamster/rom-hamster.conf`、`/etc/rom-hamster/platforms.conf`、man page | `libglib2.0-0`, `libsqlite3-0`, `libarchive13`, `zlib1g`, `libxml2` |
 | `rom-hamster-gui` | `/usr/bin/rom-hamster-gui`、`.desktop`、图标、AppStream metainfo | `rom-hamster`（= 同一版本核心）, `libgtk-4-1 (>= 4.10)`；Recommends: GTK4 GStreamer 媒体后端、`gstreamer1.0-plugins-base/-good/-libav`、`webp-pixbuf-loader` |
 | `rom-hamster-data` | `/usr/share/rom-hamster/platforms.conf`（只读出厂默认）、`/usr/share/rom-hamster/frontends/*.conf`（三份前端规格）、`rom-hamster.conf.template`、`LICENSE`、`changelog` | — |
 
@@ -1009,7 +1007,7 @@ Entware 的 `x64-k3.2` 包索引里，本项目需要的库全部存在：
 | `disc_label_prefix` | string | `Disc` | 碟片命名前缀 |
 | `auto_delete_source` | bool | `false` | 导入成功后删除源文件 |
 
-新增键（本次引入）：`store_path`（默认 `<ROM_ROOT>/romhamster.db`）、`emulator_launch`（bool）、`lang`（默认随 `LANG`）。
+新增键（本次引入）：`store_path`（默认 `<ROM_ROOT>/romhamster.db`）、`emulator_launch`（string；仅作为前端规格 `launch` 字段的模板变量，本程序不启动模拟器）、`lang`（默认随 `LANG`）。
 
 DAT 查找规则保持 1.0.0 语义：`<dat_dir>/<platform>.dat`（含 `.DAT` 大小写）精确优先，未命中则按 `aliases` 正则回退扫描 `<dat_dir>` 两层的 `*.dat`。
 
@@ -1145,7 +1143,7 @@ ROM_ROOT = /home/zhoux/roms
 | **M1 存储与规则** | `store_*` 全量、`RhGame`/`RhFilter`、`platform.c` 解析 101 平台、`debian/` 打包骨架 + **首个可安装 deb** | 101 个平台、5 段规则全部解析成功且媒体类型识别有单测；`store_*` 的 CRUD、`dir_path` UNIQUE、级联删除有测试；`dpkg -i` 后 `rom-hamster --version` 可运行；`lintian` 无 error |
 | **M2 导入** | `classify`、`archive`（libarchive）、`job` 作业线程、`dat` 索引、`library` 整库、`import` 编排 | fixtures 的 5 类压缩包（zip/7z/rar/单 ROM/混合）+ PSV 特征包 + 二义扩展名 + 多碟 CD 全部落到正确目录；`kill -9` 后重启能续做且库里无半个条目；该阶段 deb 仍可安装 |
 | **M3 检索/管理/导出** | `query`、`detail`（CLI 纯文本）、`manage`、`export` 模板引擎 + 三份前端规格 | 13 维筛选 + 4 排序键结果与直接 SQL 对齐；导出的 ES-DE / Pegasus 清单能被对应前端正常读取；golden file 逐字节 diff 通过；故意写错的模板在**加载期**报出文件名与行号 |
-| **M4 GUI** | `ui-gtk`、主窗口 `GtkColumnView`、详情页 8 类媒体分页、导入进度/取消、启动游戏、首次运行引导、拖拽导入 | 见下方 §14.1 量化指标；空配置首启能走完"选目录 → 建库 → 主窗口"；拖入目录触发导入并有可见进度；无媒体后端时视频降级为外部打开并提示 |
+| **M4 GUI** | `ui-gtk`、主窗口 `GtkColumnView`、详情页 8 类媒体分页、导入进度/取消、首次运行引导、拖拽导入 | 见下方 §14.1 量化指标；空配置首启能走完"选目录 → 建库 → 主窗口"；拖入目录触发导入并有可见进度；无媒体后端时视频降级为外部打开并提示 |
 
 | **M5 打包与发布** | AppStream metainfo（含真实截图）、完整 gettext、CI 矩阵、lintian 全绿、仓库上传 | `dpkg -i` 后 CLI 与 GUI 均可运行；`dpkg -P` 干净卸载无残留；升级时 conffile 保留管理员修改；`appstreamcli validate` 通过；至少 Ubuntu 24.04 与 Debian 13 两个发行版安装验证通过 |
 
