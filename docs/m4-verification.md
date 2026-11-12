@@ -100,3 +100,71 @@ M4 GUI STEP2: ALL PASS
 | 导入进度 / 取消 | ≤ 200 ms / < 1 s | SKIP | GUI 导入尚未实现，未伪造指标 |
 
 完整记录见 `docs/m4-perf-baseline.md`。
+
+## 8. 导入进度 / 取消（2026-11-12）
+
+### 8.1 实现
+
+- 核心取消不再只在条目之间看一眼：
+  - `rh_fs_copy_atomic_cancellable()` 在 256 KB 块循环里检查 `cancel_flag`，取消返回 4，并删除 `.part.XXXXXX` 临时文件；原 `rh_fs_copy_atomic()` 保留为无取消参数版本。
+  - `rh_arc_extract_cancellable()` 在每条目头、每个数据块检查取消；取消返回 2；原 `rh_arc_extract()` 保留。
+  - `rh_import_run()` 入口清零 `ctx->cancel_flag`；扫描阶段在 `plan_path` 顶部、目录循环、每个普通文件发 `rh_progress(-1, basename)`，扫描完成后再检查一次；压缩包解压走 cancellable 版本。
+  - 执行阶段 `exec_rom()` / `exec_media()` 使用 cancellable 复制；返回 2 时主循环 `rh_job_finish(..., "cancelled")` 并返回 `RH_ERR_CANCELLED`。
+- GUI：
+  - HeaderBar 增加 `Import` 按钮，选目录后把 `rh_import_run()` 放进 `GTask` 工作线程；主线程不碰 SQLite。
+  - 导入期间显示 `GtkProgressBar`、状态栏文件名，禁用 `Refresh`、搜索、列表和 `Import`；`Cancel` 按钮在导入开始 100 ms 后可用。
+  - 工作线程只调用 `RhUi::progress`；GUI 用 `GWeakRef` 投递到主线程，最多每 100 ms 调度一次 UI 更新。取消通过 `rh_job_cancel()` 置原子标志，不跨线程直接操作控件。
+  - 导入期间 `close-request` 返回 `TRUE`，提示先取消，避免窗口销毁后工作线程继续使用 `RhCtx`。
+  - 完成后 `refresh()` 重新查询列表，状态栏给出 imported/media/skipped/failed 汇总；取消显示 `Import cancelled`。
+- 平台规则：生产环境仍走 `platform_rules_load_standard()`（datadir / sysconf / 用户层）。开发树测试用 `RH_PLATFORMS=data/platforms.conf` 显式加载；规则数为 0 时导入直接报 `平台规则为空`，不再静默把所有文件跳过。
+
+### 8.2 验收
+
+命令：
+
+```bash
+bash tools/m4-import-check.sh
+```
+
+夹具与结果：
+
+| 用例 | 夹具 | 结果 |
+|---|---|---|
+| 正常导入进度 | 800 个 32 KB NES 文件，全新库 | imported=800，rows=800 |
+| 进度回调最大间隔 | 同上 | 32.7–83.7 ms（多次运行，阈值 ≤200 ms） |
+| UI 刷新最大间隔 | 同上 | 109.8–153.4 ms（阈值 ≤200 ms；首次 UI 更新 571–787 ms 是首帧绘制，单独记录，不计入刷新间隔） |
+| 取消延迟 | 1500 个 64 KB NES，300 ms 时取消 | 3–4 ms（阈值 <1 s） |
+| 取消后状态 | 同上 | `cancelled=1`，155 条完整游戏保留；无 `.part.*`；无 games 无 rom 的半条记录 |
+| 取消后再次导入 | 同一库、同一输入 | imported=1500，rows=1500（幂等补齐，无重复） |
+| ASAN 取消 | 500 个 64 KB NES，300 ms 取消 | rc=0，取消 4 ms，无 ASAN 报告 |
+
+回归：
+
+- `SKIP_DEB=1 bash tools/m2-check.sh`：PASS 42 / FAIL 0。
+- `SKIP_DEB=1 bash tools/m3-check.sh`：M3 CHECK: ALL PASS。
+- `bash tools/m4-gui-check.sh`：M4 GUI STEP2: ALL PASS。
+- `bash tools/m4-import-check.sh`：M4 IMPORT: ALL PASS。
+- 新增单测 `/util/cancel`：复制取消返回 4 且目标不存在；解压取消返回 2 且不落文件；`meson test -C build` 5/5 通过。
+
+### 8.3 取消语义
+
+- 取消时**保留已经完整提交的游戏记录**，不回滚整批；只保证不产生“games 有行但没有 rom”的半条记录。理由：导入以单条游戏事务提交，回滚整批会删掉用户已经看到并可能继续使用的条目；架构 §14.1 只规定取消延迟，未规定整批回滚。
+- 正在复制的文件通过 `.part.XXXXXX` + rename 保证原子性；取消时删除临时文件。取消发生在解压包扫描阶段时，临时解压目录在 `rh_import_run` 清理路径删除。
+- 取消后再次导入同一目录是幂等的：完整条目跳过/更新，缺失条目补齐。
+- 扫描阶段取消不应答 UI 对话框；`opts.non_interactive=TRUE`，二义格式/多平台候选取第一项，不再弹选择。
+
+### 8.4 本步修掉的缺陷
+
+| # | 缺陷 | 发现方式 | 修法 |
+|---|---|---|---|
+| 1 | `GTask` 的 task data 设成了路径字符串，`import_thread` 把 `data` 当 `Gui*` 用，`g->ctx` 读到路径内容，导入线程启动即段错误 | GUI import smoke rc=139；ASAN 指向 `rh_import_run` 的 `ctx->cancel_flag` | 新增 `ImportArgs{Gui*, path}` 作为 task data，线程函数从 `ImportArgs` 取两者 |
+| 2 | `rh_ctx_set_ui()` 保存指向块作用域复合字面量 `&(RhUi){...}` 的指针，函数返回后悬空；进度回调会 UAF | 代码审查（在导入 smoke 前修掉） | 改为文件级 `static RhUi GUI_UI`，每次启动设置 `userdata` |
+| 3 | `ui_max_gap` 把首帧绘制时间算进“进度刷新间隔”，800 文件误报 425.6 ms | `m4-import-check.sh` 首次运行 | 首次 UI 更新单独记 `first_ui_ms`，从第二次起统计 `ui_max_gap` |
+| 4 | 平台规则为空时导入静默全跳过 | 开发树无 `/usr/local/share/rom-hamster/platforms.conf` | 规则数为 0 直接返回 `RH_ERR_CONFIG`，提示安装 data 包或设 `RH_PLATFORMS` |
+
+### 8.5 仍未闭环
+
+1. 真实 `GtkFileDialog` 人机点选仍未自动化；smoke 用 `RH_SMOKE_IMPORT_DIR` 直接走选完目录后的路径。
+2. 拖拽导入、导入完成后自动打开详情页、导入历史/失败重试不在本步。
+3. 压缩包取消只在单测覆盖“取消返回 2 且不落文件”；GUI 级“解压大包时取消”尚未跑真实大包夹具。
+4. 取消后的已提交条目保留策略已写在本节，但尚未写进 `ARCHITECTURE.md` 的验收口径；需要用户确认是否接受“不回滚整批”。

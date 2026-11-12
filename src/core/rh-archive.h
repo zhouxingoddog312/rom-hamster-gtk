@@ -31,5 +31,10 @@ gboolean rh_arc_is_encrypted(const char *archive_path);
 int rh_arc_extract(const char *archive_path, const char *dest,
                    const char *password, RhErr *err);
 
+/* 带协作取消的解压；返回 0 成功、1 失败、2 已取消。 */
+int rh_arc_extract_cancellable(const char *archive_path, const char *dest,
+                               const char *password, gint *cancel_flag,
+                               RhErr *err);
+
 /* 打一个只存不压的 zip（导出/测试用），files 为绝对路径，包内只留 basename */
 int rh_arc_create_zip(const char *archive_path, GPtrArray *files, RhErr *err);

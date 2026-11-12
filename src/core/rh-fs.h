@@ -20,10 +20,17 @@ int  rh_fs_mkdir_p(const char *path, RhErr *err);
  *   0 = 已复制
  *   2 = 目标已存在且 size+mtime 一致（幂等跳过，不覆盖）
  *   3 = 目标已存在但不同，且 overwrite = FALSE（调用方决定跳过）
+ *   4 = 已取消（仅 cancellable 版本）
  *   1 = 失败（err 填原因）
  */
 int rh_fs_copy_atomic(const char *src, const char *dest, gboolean overwrite,
                       RhErr *err);
+
+/* 带协作取消的原子复制；cancel_flag 非 NULL 时按块检查。
+ * 返回码同 rh_fs_copy_atomic，另加 4 = 已取消。 */
+int rh_fs_copy_atomic_cancellable(const char *src, const char *dest,
+                                  gboolean overwrite, gint *cancel_flag,
+                                  RhErr *err);
 
 /* 文本原子写（tmp + rename） */
 int rh_fs_write_text_atomic(const char *path, const char *text, RhErr *err);

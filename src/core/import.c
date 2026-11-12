@@ -57,6 +57,7 @@ typedef struct {
   int                  lib_imported;
   int                  lib_skipped;
   int                  lib_failed;
+  gboolean             cancelled;
 } Scan;
 
 /* ------------------------------------------------------------ 计划条目 */
@@ -349,10 +350,19 @@ static gchar *extract_dir(Scan *s, const char *archive)
 
   g_free(sub);
   rh_err_clear(&e);
-  if (rh_arc_extract(archive, dir, NULL, &e) != 0) {
-    rh_log(s->ctx, RH_LOG_WARN, "解压失败：%s（%s）", archive, e.msg);
-    g_free(dir);
-    return NULL;
+  {
+    int rc = rh_arc_extract_cancellable(archive, dir, NULL,
+                                        &s->ctx->cancel_flag, &e);
+
+    if (rc == 2) {
+      s->cancelled = TRUE;
+    } else if (rc != 0) {
+      rh_log(s->ctx, RH_LOG_WARN, "解压失败：%s（%s）", archive, e.msg);
+    }
+    if (rc != 0) {
+      g_free(dir);
+      return NULL;
+    }
   }
   return dir;
 }
@@ -698,6 +708,10 @@ static void plan_path(Scan *s, const char *path, gboolean original, int depth)
   RhClass *c;
   RhErr e;
 
+  if (s->cancelled || rh_job_cancelled(s->ctx)) {
+    s->cancelled = TRUE;
+    return;
+  }
   if (depth > 6) {
     rh_log(s->ctx, RH_LOG_WARN, "嵌套过深，跳过：%s", path);
     s->skipped++;
@@ -706,7 +720,7 @@ static void plan_path(Scan *s, const char *path, gboolean original, int depth)
   if (rh_fs_is_dir(path)) {
     GPtrArray *files = rh_fs_walk_files(path);
 
-    for (guint i = 0; i < files->len; i++)
+    for (guint i = 0; i < files->len && !s->cancelled; i++)
       plan_path(s, files->pdata[i], original, depth + 1);
     g_ptr_array_unref(files);
     return;
@@ -714,6 +728,12 @@ static void plan_path(Scan *s, const char *path, gboolean original, int depth)
   if (!rh_fs_is_file(path)) {
     s->skipped++;
     return;
+  }
+  {
+    gchar *base = g_path_get_basename(path);
+
+    rh_progress(s->ctx, -1, base);
+    g_free(base);
   }
 
   c = rh_class_new();
@@ -1127,8 +1147,17 @@ static int exec_rom(Scan *s, RhPlanItem *it, RhImportReport *rep)
     }
 
     {
-      int cp = rh_fs_copy_atomic(it->src, dest, s->opts->overwrite, &e);
+      int cp = rh_fs_copy_atomic_cancellable(it->src, dest,
+                                             s->opts->overwrite,
+                                             &s->ctx->cancel_flag, &e);
 
+      if (cp == 4) {
+        g_free(dest);
+        g_free(target);
+        g_free(old_single);
+        rc = 2;
+        goto done;
+      }
       if (cp == 1) {
         rh_log(s->ctx, RH_LOG_ERROR, "复制失败：%s（%s）", it->src, e.msg);
         g_free(dest);
@@ -1268,8 +1297,14 @@ static int exec_media(Scan *s, RhPlanItem *it, RhImportReport *rep)
   dest = g_build_filename(mdir, base, NULL);
 
   {
-    int cp = rh_fs_copy_atomic(it->src, dest, s->opts->overwrite, &e);
+    int cp = rh_fs_copy_atomic_cancellable(it->src, dest,
+                                           s->opts->overwrite,
+                                           &s->ctx->cancel_flag, &e);
 
+    if (cp == 4) {
+      rc = 2;
+      goto done;
+    }
     if (cp == 1) {
       rh_log(s->ctx, RH_LOG_ERROR, "复制失败：%s（%s）", it->src, e.msg);
       goto done;
@@ -1327,6 +1362,7 @@ RhErr rh_import_run(RhCtx *ctx, RhPlatformRules *rules, GPtrArray *inputs,
 
   g_return_val_if_fail(out != NULL, rh_fail(RH_ERR_INTERNAL, "import: out is NULL"));
   *out = NULL;
+  g_atomic_int_set(&ctx->cancel_flag, 0);
 
   memset(&s, 0, sizeof s);
   s.ctx = ctx;
@@ -1402,6 +1438,11 @@ RhErr rh_import_run(RhCtx *ctx, RhPlatformRules *rules, GPtrArray *inputs,
   }
 
   order_items(s.items);
+
+  if (s.cancelled || rh_job_cancelled(ctx)) {
+    ret = rh_fail(RH_ERR_CANCELLED, "导入已取消");
+    goto cleanup;
+  }
 
   rep = g_new0(RhImportReport, 1);
   rep->planned = (int) s.items->len + s.lib_imported + s.lib_skipped + s.lib_failed;
@@ -1486,10 +1527,19 @@ RhErr rh_import_run(RhCtx *ctx, RhPlatformRules *rules, GPtrArray *inputs,
       rep->skipped++;
       continue;
     }
-    if ((it->action && strcmp(it->action, "media") == 0)
-          ? exec_media(&s, it, rep)
-          : exec_rom(&s, it, rep))
-      rep->failed++;
+    {
+      int x = (it->action && strcmp(it->action, "media") == 0)
+                ? exec_media(&s, it, rep)
+                : exec_rom(&s, it, rep);
+
+      if (x == 2) {
+        rh_job_finish(ctx, rep->job_id, "cancelled", NULL);
+        ret = rh_fail(RH_ERR_CANCELLED, "导入已取消");
+        goto cleanup;
+      }
+      if (x)
+        rep->failed++;
+    }
 
     {
       gchar *base = g_path_get_basename(it->src);

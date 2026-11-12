@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "rh-err.h"
+#include "rh-archive.h"
 #include "rh-fs.h"
 #include "rh-hash.h"
 #include "rh-str.h"
@@ -168,6 +169,55 @@ static void test_sniff(void)
   g_free(dir);
 }
 
+static void test_cancel(void)
+{
+  gchar *dir = g_dir_make_tmp("rh-cancel-XXXXXX", NULL);
+  gchar *src, *dest, *zip, *outdir;
+  GString *body = g_string_sized_new(512 * 1024);
+  RhErr e = rh_ok();
+  gint cancel = 1;
+  int rc;
+
+  g_assert_nonnull(dir);
+  src = g_build_filename(dir, "src.bin", NULL);
+  dest = g_build_filename(dir, "dest.bin", NULL);
+  zip = g_build_filename(dir, "pack.zip", NULL);
+  outdir = g_build_filename(dir, "out", NULL);
+  for (guint i = 0; i < 512 * 1024; i++)
+    g_string_append_c(body, (char) (i & 0xff));
+  g_file_set_contents(src, body->str, (gssize) body->len, NULL);
+  g_string_free(body, TRUE);
+
+  rc = rh_fs_copy_atomic_cancellable(src, dest, FALSE, &cancel, &e);
+  g_assert_cmpint(rc, ==, 4);
+  g_assert_false(g_file_test(dest, G_FILE_TEST_EXISTS));
+  g_assert_cmpint(e.code, ==, RH_ERR_CANCELLED);
+
+  {
+    GPtrArray *files = g_ptr_array_new();
+
+    g_ptr_array_add(files, src);
+    g_assert_cmpint(rh_arc_create_zip(zip, files, &e), ==, 0);
+    g_ptr_array_unref(files);
+  }
+  cancel = 1;
+  rc = rh_arc_extract_cancellable(zip, outdir, NULL, &cancel, &e);
+  g_assert_cmpint(rc, ==, 2);
+  g_assert_false(g_file_test(g_build_filename(outdir, "src.bin", NULL),
+                             G_FILE_TEST_EXISTS));
+
+  g_remove(src);
+  g_remove(dest);
+  g_remove(zip);
+  g_rmdir(outdir);
+  g_rmdir(dir);
+  g_free(src);
+  g_free(dest);
+  g_free(zip);
+  g_free(outdir);
+  g_free(dir);
+}
+
 int main(int argc, char **argv)
 {
   g_test_init(&argc, &argv, NULL);
@@ -177,5 +227,6 @@ int main(int argc, char **argv)
   g_test_add_func("/util/sim", test_sim);
   g_test_add_func("/util/hash", test_hash);
   g_test_add_func("/util/sniff", test_sniff);
+  g_test_add_func("/util/cancel", test_cancel);
   return g_test_run();
 }

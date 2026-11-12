@@ -11,6 +11,9 @@
 #include <stdlib.h>
 
 #include "detail-pane.h"
+#include "import.h"
+#include "job.h"
+#include "platform.h"
 #include "game-model.h"
 #include "query.h"
 #include "rh-config.h"
@@ -19,6 +22,21 @@
 #include "rh-records.h"
 #include "rh-version.h"
 #include "store.h"
+
+typedef struct {
+  gboolean running;
+  gboolean cancel_requested;
+  gint64   started_at;
+  gint64   last_progress_at;
+  gint64   last_sched_at;
+  gint64   last_ui_at;
+  gint64   cancel_at;
+  gint64   cancel_ms;
+  gint64   first_ui_ms;
+  guint    enable_cancel_id;
+  gint64   max_progress_gap_us;
+  gint64   max_ui_gap_us;
+} ImportState;
 
 typedef struct {
   GtkApplication *app;
@@ -34,8 +52,12 @@ typedef struct {
   GtkStack *stack;
   GtkLabel *status;
   GtkProgressBar *progress;
+  GtkButton *btn_import;
+  GtkButton *btn_cancel;
+  GtkButton *btn_rescan;
   guint search_timeout;
   gboolean store_open;
+  ImportState imp;
 } Gui;
 
 typedef struct {
@@ -59,6 +81,7 @@ typedef struct {
 } Perf;
 
 static Perf P;
+static RhUi GUI_UI;
 
 static long rss_kb(void)
 {
@@ -316,6 +339,330 @@ static gboolean open_library(Gui *g, const char *root)
   return TRUE;
 }
 
+/* --------------------------------------------------------------- 导入 */
+
+typedef struct {
+  RhErr err;
+  RhImportReport *rep;
+  gboolean cancelled;
+} ImportResult;
+
+typedef struct {
+  Gui *g;
+  gchar *path;
+} ImportArgs;
+
+static void import_args_free(gpointer data)
+{
+  ImportArgs *a = data;
+
+  g_free(a->path);
+  g_free(a);
+}
+
+typedef struct {
+  GWeakRef win;
+  double pct;
+  gchar *label;
+} ProgressMsg;
+
+static void progress_msg_free(gpointer data)
+{
+  ProgressMsg *m = data;
+
+  g_weak_ref_clear(&m->win);
+  g_free(m->label);
+  g_free(m);
+}
+
+static gboolean update_progress_ui(gpointer data)
+{
+  ProgressMsg *m = data;
+  GtkWindow *win = g_weak_ref_get(&m->win);
+
+  if (win) {
+    Gui *g = g_object_get_data(G_OBJECT(win), "gui");
+
+    if (g && g->imp.running) {
+      gint64 now = g_get_monotonic_time();
+
+      if (g->imp.last_ui_at) {
+        if (now - g->imp.last_ui_at > g->imp.max_ui_gap_us)
+          g->imp.max_ui_gap_us = now - g->imp.last_ui_at;
+      } else {
+        /* 首次更新取决于首帧绘制，单独记为 first_ui_ms，不计入刷新间隔。 */
+        g->imp.first_ui_ms = (now - g->imp.started_at) / 1000;
+      }
+      g->imp.last_ui_at = now;
+      gtk_widget_set_visible(GTK_WIDGET(g->progress), TRUE);
+      if (m->pct < 0)
+        gtk_progress_bar_pulse(g->progress);
+      else
+        gtk_progress_bar_set_fraction(g->progress,
+                                      CLAMP(m->pct, 0.0, 1.0));
+      gtk_progress_bar_set_text(g->progress, m->label && *m->label ? m->label : "");
+      set_status(g, "Importing: %s", m->label && *m->label ? m->label : "…");
+    }
+    g_object_unref(win);
+  }
+  return G_SOURCE_REMOVE;
+}
+
+/* 工作线程只通过这个回调发进度，不直接碰 GTK。最多每 100 ms 投递一次。 */
+static void gui_import_progress(void *ud, double pct, const char *label)
+{
+  Gui *g = ud;
+  gint64 now;
+
+  if (!g || !g->imp.running)
+    return;
+  now = g_get_monotonic_time();
+  if (g->imp.last_progress_at &&
+      now - g->imp.last_progress_at > g->imp.max_progress_gap_us)
+    g->imp.max_progress_gap_us = now - g->imp.last_progress_at;
+  g->imp.last_progress_at = now;
+  if (now - g->imp.last_sched_at < 100000 && pct < 1.0)
+    return;
+  g->imp.last_sched_at = now;
+
+  ProgressMsg *m = g_new0(ProgressMsg, 1);
+
+  g_weak_ref_init(&m->win, g->win);
+  m->pct = pct;
+  m->label = g_strdup(label ? label : "");
+  g_idle_add_full(G_PRIORITY_DEFAULT, update_progress_ui, m, progress_msg_free);
+}
+
+static void import_result_free(gpointer data)
+{
+  ImportResult *r = data;
+
+  if (r->rep)
+    g_free(r->rep);
+  g_free(r);
+}
+
+static void import_thread(GTask *task, gpointer source, gpointer data,
+                          GCancellable *cancellable)
+{
+  ImportArgs *a = data;
+  Gui *g = a->g;
+  const char *path = a->path;
+  RhPlatformRules *rules = platform_rules_new();
+  RhErr e = platform_rules_load_standard(rules);
+  RhImportReport *rep = NULL;
+  ImportResult *r = g_new0(ImportResult, 1);
+
+  (void) source;
+  (void) cancellable;
+  {
+    const char *pf = g_getenv("RH_PLATFORMS");
+
+    if (pf && *pf)
+      e = platform_rules_load(rules, pf);
+  }
+  if (!rh_err_ok(&e) && platform_count(rules) == 0) {
+    r->err = e;
+  } else if (platform_count(rules) == 0) {
+    r->err = rh_fail(RH_ERR_CONFIG,
+                     "平台规则为空：请安装 rom-hamster-data，或设置 RH_PLATFORMS");
+  } else {
+    GPtrArray *inputs = g_ptr_array_new_with_free_func(g_free);
+    RhImportOpts opts = { 0 };
+
+    if (!rh_err_ok(&e))
+      rh_err_clear(&e);
+    g_ptr_array_add(inputs, g_canonicalize_filename(path, NULL));
+    opts.non_interactive = TRUE;
+    r->err = rh_import_run(g->ctx, rules, inputs, &opts, &rep);
+    r->rep = rep;
+    r->cancelled = rh_job_cancelled(g->ctx);
+    g_ptr_array_unref(inputs);
+  }
+  platform_rules_free(rules);
+  g_task_return_pointer(task, r, import_result_free);
+}
+
+static void request_import_cancel(Gui *g)
+{
+  if (!g->imp.running || g->imp.cancel_requested)
+    return;
+  g->imp.cancel_requested = TRUE;
+  g->imp.cancel_at = g_get_monotonic_time();
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), FALSE);
+  rh_job_cancel(g->ctx);
+  set_status(g, "Cancelling import…");
+}
+
+static void on_cancel_clicked(GtkButton *btn, gpointer data)
+{
+  (void) btn;
+  request_import_cancel(data);
+}
+
+static gboolean smoke_import_cancel(gpointer data)
+{
+  request_import_cancel(data);
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean enable_cancel(gpointer data)
+{
+  Gui *g = data;
+
+  g->imp.enable_cancel_id = 0;
+  if (g->imp.running)
+    gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), TRUE);
+  return G_SOURCE_REMOVE;
+}
+
+static void on_import_done(GObject *source, GAsyncResult *res, gpointer data)
+{
+  Gui *g = data;
+
+  (void) source;
+  ImportResult *r = g_task_propagate_pointer(G_TASK(res), NULL);
+  gint64 now = g_get_monotonic_time();
+
+  g->imp.running = FALSE;
+  if (g->imp.enable_cancel_id) {
+    g_source_remove(g->imp.enable_cancel_id);
+    g->imp.enable_cancel_id = 0;
+  }
+  if (g->imp.cancel_at)
+    g->imp.cancel_ms = (now - g->imp.cancel_at) / 1000;
+
+  gtk_widget_set_visible(GTK_WIDGET(g->progress), FALSE);
+  gtk_widget_set_visible(GTK_WIDGET(g->btn_cancel), FALSE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_import), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_rescan), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->search), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->list), TRUE);
+
+  refresh(g);
+  if (!r) {
+    set_status(g, "Import failed: no result");
+  } else if ((r->err.code == RH_ERR_CANCELLED) || r->cancelled) {
+    set_status(g, "Import cancelled%s",
+               g->imp.cancel_ms ? "" : " (before start)");
+  } else if (!rh_err_ok(&r->err)) {
+    set_status(g, "Import failed: %s", r->err.msg);
+  } else if (r->rep) {
+    set_status(g, "Imported %d ROM + %d media, skipped %d, failed %d",
+               r->rep->imported, r->rep->media,
+               r->rep->skipped, r->rep->failed);
+  } else {
+    set_status(g, "Import finished");
+  }
+
+  if (g_getenv("RH_SMOKE_TEST")) {
+    g_printerr("smoke: import cancelled=%d planned=%d imported=%d media=%d "
+               "skipped=%d failed=%d\n",
+               r ? (r->cancelled || r->err.code == RH_ERR_CANCELLED) : 0,
+               r && r->rep ? r->rep->planned : -1,
+               r && r->rep ? r->rep->imported : -1,
+               r && r->rep ? r->rep->media : -1,
+               r && r->rep ? r->rep->skipped : -1,
+               r && r->rep ? r->rep->failed : -1);
+    g_printerr("smoke: import progress_max_gap_ms=%.1f ui_max_gap_ms=%.1f "
+               "first_ui_ms=%ld cancel_ms=%.1f rows=%u\n",
+               g->imp.max_progress_gap_us / 1000.0,
+               g->imp.max_ui_gap_us / 1000.0,
+               (long) g->imp.first_ui_ms,
+               (double) g->imp.cancel_ms,
+               rh_game_list_model_get_count(g->model));
+    g_application_quit(G_APPLICATION(g->app));
+  }
+  if (r)
+    import_result_free(r);
+}
+
+static void start_import_path(Gui *g, const char *path)
+{
+  GTask *task;
+
+  if (!g || !g->store_open || g->imp.running || !path || !*path)
+    return;
+  g->imp.running = TRUE;
+  g->imp.cancel_requested = FALSE;
+  g->imp.started_at = g_get_monotonic_time();
+  g->imp.last_progress_at = g->imp.started_at;
+  g->imp.last_sched_at = 0;
+  g->imp.last_ui_at = 0;
+  g->imp.cancel_at = 0;
+  g->imp.cancel_ms = 0;
+  g->imp.max_progress_gap_us = 0;
+  g->imp.max_ui_gap_us = 0;
+  g->imp.first_ui_ms = -1;
+  GUI_UI.userdata = g;
+  GUI_UI.progress = gui_import_progress;
+  GUI_UI.log = NULL;
+  rh_ctx_set_ui(g->ctx, &GUI_UI);
+  g_atomic_int_set(&g->ctx->cancel_flag, 0);
+
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_import), FALSE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_rescan), FALSE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->search), FALSE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->list), FALSE);
+  gtk_widget_set_visible(GTK_WIDGET(g->progress), TRUE);
+  gtk_progress_bar_set_fraction(g->progress, 0.0);
+  gtk_progress_bar_set_text(g->progress, "Scanning…");
+  gtk_widget_set_visible(GTK_WIDGET(g->btn_cancel), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), FALSE);
+  g->imp.enable_cancel_id = g_timeout_add(100, enable_cancel, g);
+  set_status(g, "Scanning %s", path);
+
+  task = g_task_new(NULL, NULL, on_import_done, g);
+  {
+    ImportArgs *a = g_new0(ImportArgs, 1);
+
+    a->g = g;
+    a->path = g_strdup(path);
+    g_task_set_task_data(task, a, import_args_free);
+  }
+  g_task_run_in_thread(task, import_thread);
+  g_object_unref(task);
+}
+
+static void on_import_folder_chosen(GObject *source, GAsyncResult *res,
+                                    gpointer data)
+{
+  Gui *g = data;
+  GtkFileDialog *dlg = GTK_FILE_DIALOG(source);
+  GFile *folder;
+  GError *err = NULL;
+  gchar *path;
+
+  folder = gtk_file_dialog_select_folder_finish(dlg, res, &err);
+  if (!folder) {
+    if (!g_error_matches(err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
+      GtkAlertDialog *ad = gtk_alert_dialog_new("Cannot choose folder: %s",
+                                                err->message);
+      gtk_alert_dialog_show(ad, g->win);
+      g_object_unref(ad);
+    }
+    g_clear_error(&err);
+    return;
+  }
+  path = g_file_get_path(folder);
+  g_object_unref(folder);
+  start_import_path(g, path);
+  g_free(path);
+}
+
+static void on_import_clicked(GtkButton *btn, gpointer data)
+{
+  Gui *g = data;
+  GtkFileDialog *dlg = gtk_file_dialog_new();
+
+  (void) btn;
+  gtk_file_dialog_set_title(dlg, "Import games or a folder");
+  gtk_file_dialog_select_folder(dlg, g->win, NULL,
+                                on_import_folder_chosen, g);
+  g_object_unref(dlg);
+}
+
 /* --------------------------------------------------------------- 首启 */
 
 static void on_root_chosen(GObject *source, GAsyncResult *res, gpointer data)
@@ -533,6 +880,20 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (expect && g->model &&
       rh_game_list_model_get_count(g->model) != (guint) atoi(expect))
     g_printerr("smoke: expected %s row(s)\n", expect);
+  if (g_getenv("RH_SMOKE_IMPORT_DIR")) {
+    const char *cancel_ms = g_getenv("RH_SMOKE_IMPORT_CANCEL_MS");
+    GSource *src = NULL;
+
+    start_import_path(g, g_getenv("RH_SMOKE_IMPORT_DIR"));
+    if (cancel_ms && *cancel_ms)
+      src = g_timeout_source_new(atoi(cancel_ms));
+    if (src) {
+      g_source_set_callback(src, smoke_import_cancel, g, NULL);
+      g_source_attach(src, NULL);
+      g_source_unref(src);
+    }
+    return;
+  }
   if (kw && *kw) {
     gtk_editable_set_text(GTK_EDITABLE(g->search), kw);
     g_timeout_add(500, smoke_after_search, g);
@@ -545,6 +906,18 @@ static void on_window_map(GtkWidget *widget, gpointer data)
     return;
   }
   g_application_quit(G_APPLICATION(g->app));
+}
+
+static gboolean on_close_request(GtkWindow *win, gpointer data)
+{
+  Gui *g = data;
+
+  (void) win;
+  if (g->imp.running) {
+    set_status(g, "Cancel the running import before closing");
+    return TRUE;
+  }
+  return FALSE;
 }
 
 static void create_window(Gui *g)
@@ -561,7 +934,9 @@ static void create_window(Gui *g)
   g->stack = GTK_STACK(gtk_builder_get_object(b, "stack"));
   g->status = GTK_LABEL(gtk_builder_get_object(b, "status"));
   g->progress = GTK_PROGRESS_BAR(gtk_builder_get_object(b, "progress"));
-  btn_rescan = GTK_BUTTON(gtk_builder_get_object(b, "btn_rescan"));
+  g->btn_import = GTK_BUTTON(gtk_builder_get_object(b, "btn_import"));
+  g->btn_cancel = GTK_BUTTON(gtk_builder_get_object(b, "btn_cancel"));
+  g->btn_rescan = btn_rescan = GTK_BUTTON(gtk_builder_get_object(b, "btn_rescan"));
 
   gtk_window_set_application(g->win, g->app);
   g->model = rh_game_list_model_new();
@@ -573,7 +948,11 @@ static void create_window(Gui *g)
 
   g_signal_connect(g->search, "changed",
                    G_CALLBACK(on_search_changed), g);
+  g_object_set_data(G_OBJECT(g->win), "gui", g);
+  gtk_progress_bar_set_show_text(g->progress, TRUE);
   g_signal_connect(btn_rescan, "clicked", G_CALLBACK(on_refresh), g);
+  g_signal_connect(g->btn_import, "clicked", G_CALLBACK(on_import_clicked), g);
+  g_signal_connect(g->btn_cancel, "clicked", G_CALLBACK(on_cancel_clicked), g);
   g_signal_connect(g->selection, "selection-changed",
                    G_CALLBACK(on_selection_changed), g);
   g->detail = detail_pane_new(g->ctx);
@@ -582,6 +961,7 @@ static void create_window(Gui *g)
                    G_CALLBACK(on_detail_back), g);
   g_signal_connect(g->list, "activate", G_CALLBACK(on_row_activated), g);
   g_signal_connect(g->win, "map", G_CALLBACK(on_window_map), g);
+  g_signal_connect(g->win, "close-request", G_CALLBACK(on_close_request), g);
   g_object_unref(g->detail);   /* stack 已持有；g->detail 仍指向同一个对象 */
   g_object_unref(b);
 }
@@ -598,6 +978,10 @@ static void on_activate(GtkApplication *app, gpointer data)
 
   (void) app;
   g->ctx = rh_ctx_new();
+  GUI_UI.userdata = g;
+  GUI_UI.progress = gui_import_progress;
+  GUI_UI.log = NULL;
+  rh_ctx_set_ui(g->ctx, &GUI_UI);
   create_window(g);
 
   root = rh_config_get(g->ctx->config, "ROM_ROOT");

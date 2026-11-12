@@ -21,6 +21,19 @@
                 <property name="tooltip-text">Reload the library list</property>
               </object>
             </child>
+            <child type="end">
+              <object class="GtkButton" id="btn_import">
+                <property name="label">Import</property>
+                <property name="tooltip-text">Import a file or folder into the library</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkButton" id="btn_cancel">
+                <property name="label">Cancel</property>
+                <property name="visible">False</property>
+                <property name="tooltip-text">Cancel the running import</property>
+              </object>
+            </child>
           </object>
         </child>
         <child>
@@ -62,7 +75,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">Import from the CLI, or drop a folder onto this window.</property>
+                    <property name="label">Use Import to add a folder to this library.</property>
                     <property name="wrap">True</property>
                     <property name="justify">center</property>
                   </object>

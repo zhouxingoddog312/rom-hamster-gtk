@@ -139,8 +139,9 @@ static gboolean safe_relpath(const char *name, gchar **clean)
   return TRUE;
 }
 
-int rh_arc_extract(const char *archive_path, const char *dest,
-                   const char *password, RhErr *err)
+static int arc_extract_impl(const char *archive_path, const char *dest,
+                            const char *password, gint *cancel_flag,
+                            RhErr *err)
 {
   struct archive *a;
   struct archive_entry *entry;
@@ -160,6 +161,11 @@ int rh_arc_extract(const char *archive_path, const char *dest,
     gchar *clean = NULL;
     gchar *path = NULL;
 
+    if (cancel_flag && g_atomic_int_get(cancel_flag)) {
+      rh_err_set(err, RH_ERR_CANCELLED, "解压已取消：%s", archive_path);
+      ret = 2;
+      goto done;
+    }
     if (!safe_relpath(archive_entry_pathname(entry), &clean))
       continue;                        /* 可疑条目直接丢弃，不解到盘上 */
     path = g_build_filename(dest, clean, NULL);
@@ -193,8 +199,16 @@ int rh_arc_extract(const char *archive_path, const char *dest,
         const void *buf;
         size_t len;
         off_t doff = 0;
-        int step = archive_read_data_block(a, &buf, &len, &doff);
+        int step;
 
+        if (cancel_flag && g_atomic_int_get(cancel_flag)) {
+          rh_err_set(err, RH_ERR_CANCELLED, "解压已取消：%s", archive_path);
+          close(fd);
+          g_free(path);
+          ret = 2;
+          goto done;
+        }
+        step = archive_read_data_block(a, &buf, &len, &doff);
         if (step == ARCHIVE_EOF)
           break;
         if (step != ARCHIVE_OK) {
@@ -232,6 +246,19 @@ int rh_arc_extract(const char *archive_path, const char *dest,
 done:
   archive_read_free(a);
   return ret;
+}
+
+int rh_arc_extract(const char *archive_path, const char *dest,
+                   const char *password, RhErr *err)
+{
+  return arc_extract_impl(archive_path, dest, password, NULL, err);
+}
+
+int rh_arc_extract_cancellable(const char *archive_path, const char *dest,
+                               const char *password, gint *cancel_flag,
+                               RhErr *err)
+{
+  return arc_extract_impl(archive_path, dest, password, cancel_flag, err);
 }
 
 int rh_arc_create_zip(const char *archive_path, GPtrArray *files, RhErr *err)

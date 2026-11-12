@@ -58,8 +58,8 @@ static gboolean same_file(const char *a, const char *b)
   return sa.st_size == sb.st_size && sa.st_mtime == sb.st_mtime;
 }
 
-int rh_fs_copy_atomic(const char *src, const char *dest, gboolean overwrite,
-                      RhErr *err)
+static int copy_atomic_impl(const char *src, const char *dest,
+                            gboolean overwrite, gint *cancel_flag, RhErr *err)
 {
   gchar *destdir = NULL, *tmpl = NULL;
   int in = -1, out = -1, rc = 1;
@@ -97,7 +97,14 @@ int rh_fs_copy_atomic(const char *src, const char *dest, gboolean overwrite,
   }
 
   for (;;) {
-    ssize_t n = read(in, buf, sizeof buf);
+    ssize_t n;
+
+    if (cancel_flag && g_atomic_int_get(cancel_flag)) {
+      rh_err_set(err, RH_ERR_CANCELLED, "复制已取消：%s", src);
+      rc = 4;
+      goto done;
+    }
+    n = read(in, buf, sizeof buf);
 
     if (n < 0) {
       if (errno == EINTR)
@@ -153,6 +160,19 @@ done:
   g_free(tmpl);
   g_free(destdir);
   return rc;
+}
+
+int rh_fs_copy_atomic(const char *src, const char *dest, gboolean overwrite,
+                      RhErr *err)
+{
+  return copy_atomic_impl(src, dest, overwrite, NULL, err);
+}
+
+int rh_fs_copy_atomic_cancellable(const char *src, const char *dest,
+                                  gboolean overwrite, gint *cancel_flag,
+                                  RhErr *err)
+{
+  return copy_atomic_impl(src, dest, overwrite, cancel_flag, err);
 }
 
 int rh_fs_write_text_atomic(const char *path, const char *text, RhErr *err)
