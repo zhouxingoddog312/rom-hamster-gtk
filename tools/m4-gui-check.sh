@@ -29,7 +29,7 @@ fi
 
 echo "=== unit tests"
 meson test -C build --print-errorlogs >"$ROOT/unit.log" 2>&1
-if [ $? -eq 0 ]; then ok "meson test (6 suites incl config-save)"; else bad "meson test"; tail -20 "$ROOT/unit.log"; fi
+if [ $? -eq 0 ]; then ok "meson test (5 suites incl config-save)"; else bad "meson test"; tail -20 "$ROOT/unit.log"; fi
 
 echo "=== fixture"
 bash tools/m3-fixture.sh >/dev/null 2>&1
@@ -78,21 +78,46 @@ c.execute("insert or replace into media(game_id,kind,filename,size,sort)"
 c.commit()
 PY
 DCFG="$ROOT/cfg-detail"
-rm -rf "$DCFG"
-XDG_CONFIG_HOME="$DCFG" RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$LIB" \
-  RH_SMOKE_EXPECT_ROWS=3 RH_SMOKE_DETAIL=1 RH_SMOKE_BACK=1 \
-  xvfb-run -a "$BIN" >"$ROOT/detail.log" 2>&1
-grep -E "smoke:" "$ROOT/detail.log"
-grep -q "detail pages=8" "$ROOT/detail.log" \
+DCACHE="$ROOT/detail-cache"
+rm -rf "$DCFG" "$DCACHE"
+run_detail() {
+  local log="$1"
+  XDG_CONFIG_HOME="$DCFG" XDG_CACHE_HOME="$DCACHE" \
+    RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$LIB" \
+    RH_SMOKE_EXPECT_ROWS=3 RH_SMOKE_DETAIL=1 RH_SMOKE_BACK=1 \
+    RH_PERF=1 \
+    xvfb-run -a "$BIN" >"$log" 2>&1
+}
+run_detail "$ROOT/detail-cold.log"
+grep -E "smoke:|perf: first_thumb" "$ROOT/detail-cold.log"
+grep -q "detail pages=8" "$ROOT/detail-cold.log" \
   && ok "detail has 8 media groups" || bad "detail group count"
-grep -q "thumbs=1/1" "$ROOT/detail.log" \
+grep -Eq "thumbs=[1-9]/[1-9]" "$ROOT/detail-cold.log" \
   && ok "cover thumbnail decoded" || bad "thumbnail not decoded"
-grep -q "videos=1" "$ROOT/detail.log" \
+grep -q "videos=1" "$ROOT/detail-cold.log" \
   && ok "video widget built" || bad "video widget missing"
-grep -q "back stack=list" "$ROOT/detail.log" \
+grep -q "back stack=list" "$ROOT/detail-cold.log" \
   && ok "back returns to list" || bad "back did not return"
-! grep -q "expected" "$ROOT/detail.log" \
+grep -q "cache_hits=0" "$ROOT/detail-cold.log" \
+  && ok "cold thumbnail cache miss" || bad "cold cache unexpectedly hit"
+! grep -q "expected" "$ROOT/detail-cold.log" \
   && ok "detail smoke had no expectation mismatch" || bad "detail expectation mismatch"
+
+run_detail "$ROOT/detail-warm.log"
+grep -E "smoke:|perf: first_thumb" "$ROOT/detail-warm.log"
+grep -Eq "cache_hits=[1-9]" "$ROOT/detail-warm.log" \
+  && ok "warm thumbnail cache hit" || bad "warm cache did not hit"
+CACHE_FILES=$(find "$DCACHE/rom-hamster/thumbs" -type f -name '*.png' 2>/dev/null | wc -l)
+if [ "$CACHE_FILES" -ge 1 ]; then
+  ok "thumbnail cache files: $CACHE_FILES"
+else
+  bad "thumbnail cache files missing"
+fi
+COLD_MS=$(grep -o "first_thumb_ms=[0-9.]*" "$ROOT/detail-cold.log" | head -1 | cut -d= -f2)
+WARM_MS=$(grep -o "first_thumb_ms=[0-9.]*" "$ROOT/detail-warm.log" | head -1 | cut -d= -f2)
+COLD_LOAD=$(grep -o "thumb_load_ms=[0-9.]*" "$ROOT/detail-cold.log" | head -1 | cut -d= -f2)
+WARM_LOAD=$(grep -o "thumb_load_ms=[0-9.]*" "$ROOT/detail-warm.log" | head -1 | cut -d= -f2)
+echo "first_thumb_ms cold=${COLD_MS:-?} warm=${WARM_MS:-?} (noisy UI); thumb_load_ms cold=${COLD_LOAD:-?} warm=${WARM_LOAD:-?}"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

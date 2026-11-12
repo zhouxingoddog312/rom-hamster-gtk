@@ -1,6 +1,7 @@
 #include "detail-pane.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <glib/gstdio.h>
 
 #include "detail.h"
 
@@ -12,39 +13,134 @@ typedef struct {
   GtkWidget *root;
   guint thumbs_started;
   guint thumbs_loaded;
+  guint thumbs_cache_hits;
+  guint thumb_generation;
   guint videos;
 } DetailPane;
 
 typedef struct {
   gchar *path;
+  gchar *cache_path;
 } ThumbJob;
+
+typedef struct {
+  GdkPixbuf *pb;
+  gboolean cache_hit;
+  gint64   load_us;
+} ThumbResult;
 
 typedef struct {
   GtkWidget *pic;       /* 持有引用，回调结束时释放 */
   GWeakRef   pane;      /* 详情页销毁后不再碰 dp */
+  guint       generation;
 } ThumbDone;
 
 static void thumb_job_free(gpointer data)
 {
   ThumbJob *j = data;
+
   g_free(j->path);
+  g_free(j->cache_path);
   g_free(j);
+}
+
+static void thumb_result_free(gpointer data)
+{
+  ThumbResult *r = data;
+
+  if (r->pb)
+    g_object_unref(r->pb);
+  g_free(r);
+}
+
+/* 缓存键 = 路径 + 源文件 size + mtime（秒级），避免改图后命中旧缩略图。 */
+static gchar *thumb_cache_path(DetailPane *dp, const char *path)
+{
+  GStatBuf st;
+  gchar *key, *hash, *dir, *file;
+
+  if (!dp->ctx->cache_dir || !path || g_stat(path, &st) != 0)
+    return NULL;
+  key = g_strdup_printf("400x300|%s|%" G_GINT64_FORMAT "|%" G_GINT64_FORMAT,
+                        path, (gint64) st.st_size,
+                        (gint64) st.st_mtime);
+  hash = g_compute_checksum_for_string(G_CHECKSUM_SHA1, key, -1);
+  dir = g_build_filename(dp->ctx->cache_dir, "thumbs", NULL);
+  g_mkdir_with_parents(dir, 0755);
+  file = g_build_filename(dir, hash, NULL);
+  {
+    gchar *with_ext = g_strconcat(file, ".png", NULL);
+
+    g_free(file);
+    file = with_ext;
+  }
+  g_free(key);
+  g_free(hash);
+  g_free(dir);
+  return file;
+}
+
+static gboolean thumb_cache_write(const char *cache_path, GdkPixbuf *pb)
+{
+  gchar *dir = g_path_get_dirname(cache_path);
+  gchar *tmp = g_build_filename(dir, ".thumb.XXXXXX", NULL);
+  GError *err = NULL;
+  int fd;
+  gboolean ok = FALSE;
+
+  g_mkdir_with_parents(dir, 0755);
+  fd = g_mkstemp(tmp);
+  if (fd < 0)
+    goto done;
+  close(fd);
+  if (gdk_pixbuf_save(pb, tmp, "png", &err, NULL)) {
+    if (g_rename(tmp, cache_path) == 0)
+      ok = TRUE;
+  }
+  g_clear_error(&err);
+  if (!ok)
+    g_unlink(tmp);
+
+done:
+  g_free(tmp);
+  g_free(dir);
+  return ok;
 }
 
 static void thumb_thread(GTask *task, gpointer source, gpointer data,
                          GCancellable *cancellable)
 {
   ThumbJob *j = data;
-  GdkPixbuf *pb;
+  GdkPixbuf *pb = NULL;
   GError *err = NULL;
+  gboolean cache_hit = FALSE;
+  gint64 t0 = g_get_monotonic_time();
 
   (void) source;
   (void) cancellable;
-  pb = gdk_pixbuf_new_from_file_at_scale(j->path, 400, 300, TRUE, &err);
-  if (pb)
-    g_task_return_pointer(task, pb, g_object_unref);
-  else
+  if (j->cache_path && g_file_test(j->cache_path, G_FILE_TEST_IS_REGULAR)) {
+    pb = gdk_pixbuf_new_from_file_at_scale(j->cache_path, 400, 300, TRUE,
+                                           &err);
+    if (pb)
+      cache_hit = TRUE;
+    else
+      g_clear_error(&err);
+  }
+  if (!pb) {
+    pb = gdk_pixbuf_new_from_file_at_scale(j->path, 400, 300, TRUE, &err);
+    if (pb && j->cache_path)
+      (void) thumb_cache_write(j->cache_path, pb);
+  }
+  if (pb) {
+    ThumbResult *r = g_new0(ThumbResult, 1);
+
+    r->pb = pb;
+    r->cache_hit = cache_hit;
+    r->load_us = g_get_monotonic_time() - t0;
+    g_task_return_pointer(task, r, thumb_result_free);
+  } else {
     g_task_return_error(task, err);
+  }
 }
 
 static gint64 PERF_DETAIL_T0;
@@ -56,28 +152,34 @@ static void thumb_done(GObject *source, GAsyncResult *res, gpointer data)
   GtkWidget *pic = done->pic;
   GtkWidget *pane = g_weak_ref_get(&done->pane);
   DetailPane *dp = pane ? g_object_get_data(G_OBJECT(pane), "dp") : NULL;
-  GdkPixbuf *pb;
+  ThumbResult *r;
   GError *err = NULL;
 
   (void) source;
-  pb = g_task_propagate_pointer(G_TASK(res), &err);
-  if (pb) {
-    GdkTexture *tex = gdk_texture_new_for_pixbuf(pb);
-    gtk_picture_set_paintable(GTK_PICTURE(pic), GDK_PAINTABLE(tex));
-    if (dp) {
+  r = g_task_propagate_pointer(G_TASK(res), &err);
+  if (r && r->pb) {
+    if (dp && done->generation == dp->thumb_generation) {
+      GdkTexture *tex = gdk_texture_new_for_pixbuf(r->pb);
+
+      gtk_picture_set_paintable(GTK_PICTURE(pic), GDK_PAINTABLE(tex));
       dp->thumbs_loaded++;
+      if (r->cache_hit)
+        dp->thumbs_cache_hits++;
       if (PERF_DETAIL_T0 && !PERF_FIRST_THUMB) {
         PERF_FIRST_THUMB = TRUE;
-        g_printerr("perf: first_thumb_ms=%.1f\n",
-                   (g_get_monotonic_time() - PERF_DETAIL_T0) / 1000.0);
+        g_printerr("perf: first_thumb_ms=%.1f thumb_load_ms=%.1f "
+                   "cache_hit=%d\n",
+                   (g_get_monotonic_time() - PERF_DETAIL_T0) / 1000.0,
+                   r->load_us / 1000.0, r->cache_hit ? 1 : 0);
       }
+      g_object_unref(tex);
     }
-    g_object_unref(tex);
-    g_object_unref(pb);
   } else {
     gtk_picture_set_paintable(GTK_PICTURE(pic), NULL);
     g_clear_error(&err);
   }
+  if (r)
+    thumb_result_free(r);
   g_clear_object(&pane);
   g_object_unref(pic);
   g_weak_ref_clear(&done->pane);
@@ -91,7 +193,9 @@ static void start_thumb(DetailPane *dp, GtkWidget *pic, const char *path)
   ThumbDone *done = g_new0(ThumbDone, 1);
 
   job->path = g_strdup(path);
+  job->cache_path = thumb_cache_path(dp, path);
   done->pic = g_object_ref(pic);
+  done->generation = dp->thumb_generation;
   g_weak_ref_init(&done->pane, dp->root);
   dp->thumbs_started++;
   task = g_task_new(NULL, NULL, thumb_done, done);
@@ -402,6 +506,13 @@ guint detail_pane_thumbs_started(GtkWidget *pane)
   return dp ? dp->thumbs_started : 0;
 }
 
+guint detail_pane_thumbs_cache_hits(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp ? dp->thumbs_cache_hits : 0;
+}
+
 guint detail_pane_page_count(GtkWidget *pane)
 {
   DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
@@ -435,6 +546,11 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
   PERF_FIRST_THUMB = FALSE;
   clear_box(dp->meta);
   clear_stack(dp->media);
+  dp->thumb_generation++;
+  dp->thumbs_started = 0;
+  dp->thumbs_loaded = 0;
+  dp->thumbs_cache_hits = 0;
+  dp->videos = 0;
 
   e = rh_detail_load(dp->ctx, game_id, &d);
   if (!rh_err_ok(&e)) {

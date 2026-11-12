@@ -10,7 +10,7 @@
 | 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
 | 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
-**明确未做**：缩略图磁盘缓存、拖拽导入、导入进度/取消、启动游戏、10k 条性能指标、真实视频后端的播放验证。
+**明确未做**：启动游戏、真实视频后端的播放验证、真实指针拖拽事件的自动化。缩略图磁盘缓存与拖拽导入已在本轮补做。
 
 ## 2. 验收结果
 
@@ -19,7 +19,7 @@
 ```
 build                  PASS  ninja -C build-gui
 核心库                 PASS  ldd libromham 无 gtk/gdk/pango
-unit tests             PASS  meson test 6 suites
+unit tests             PASS  meson test 5 suites
 fixture                PASS  3 games（Alpha 封面为真实 400x400 PNG）
 首次运行空目录         PASS  窗口 map、0 行、romhamster.db 已建、ROM_ROOT 已写
 已有库                 PASS  3 行
@@ -32,7 +32,7 @@ M4 GUI STEP2: ALL PASS
 
 补充验证：
 
-- AddressSanitizer 构建 `build-gui-asan` 跑详情页 + 返回，无 ASAN 报错。ASAN 下 1.2 s 内缩略图未完成（`thumbs=0/1`），属测试等待时间不足，普通构建为 `1/1`。
+- AddressSanitizer 构建 `build-gui-asan` 跑详情页 + 返回，无 ASAN 报错。ASAN 下等待 2.5 s 仍可能只到 `thumbs=0/1`（ASAN 下缩略图线程明显更慢），普通构建为 `1/1`；不把 ASAN 的缩略图计数当功能失败。
 - `SKIP_DEB=0 bash tools/m2-check.sh` → 43/43，三 deb 构建成功。
 - `SKIP_DEB=1 bash tools/m3-check.sh` 全绿。
 - 解包 deb 后 `rom-hamster-gui` 在 xvfb 下进入详情页，8 组、缩略图 1/1、返回列表均正常（证明 `.ui` 资源确已进包）。
@@ -56,7 +56,7 @@ M4 GUI STEP2: ALL PASS
 | 3 | `gtk_text_view_set_margin_start/end/top/bottom` 不存在 | 编译失败 | 改用 `gtk_text_view_set_left/right/top/bottom_margin` |
 | 4 | 夹具里的 PNG 缺 chunk length、后补又缺每行 filter byte，缩略图解码报 `Unknown filter method 200` | `thumbs=0/1` + 打印解码错误 | 修正 fixture 的 PNG 生成；`tools/m3-fixture.sh` 现生成真实 400x400 PNG |
 | 5 | 缩略图回调保存裸 `DetailPane*`，窗口先销毁时可能 UAF | 代码审查 | 改为 `GWeakRef` 持有详情根窗口；窗口没了就不计数、不碰 `dp` |
-| 6 | smoke 在 `show_detail()` 后立刻打印 `thumbs`，异步解码还没回来，误报 0 | 测试输出顺序 | smoke 延迟 1.2 s 再打印并退出 |
+| 6 | smoke 在 `show_detail()` 后立刻打印 `thumbs`，异步解码还没回来，误报 0 | 测试输出顺序 | smoke 延迟到异步缩略图完成后打印并退出（当前 2.5 s） |
 
 已知未消除的编译警告：`gdk_texture_new_for_pixbuf` 在 GTK 4.22 标记 deprecated。当前基线 GTK 4.10 仍可用，暂保留，未改用 `gdk_memory_texture_new`（后者需要处理 pixbuf 的 RGB/RGBA 格式差异）。
 
@@ -64,14 +64,15 @@ M4 GUI STEP2: ALL PASS
 
 - 元数据字段：Platform / Year / Genre / Developer / Publisher / Region / Players / Rating / Status / Format / Multi-disc / Patch / DAT / Directory，值可选中复制。
 - 资源组固定顺序：`rom`、`covers`、`screenshots`、`videos`、`marquees`、`miximages`、`intro`、`patcher`，与 `rh_detail_group_kind()` 一致，不重复实现目录规则。
-- 图片在 `GTask` 线程池里用 `gdk_pixbuf_new_from_file_at_scale(400,300)` 解码，主线程只做 `GdkTexture` 绑定；UI 不等待磁盘。
+- 图片在 `GTask` 线程池里先查磁盘缓存，再决定解码原图还是读缓存；主线程只做 `GdkTexture` 绑定；UI 不等待磁盘。
+- 缩略图缓存目录 `$XDG_CACHE_HOME/rom-hamster/thumbs/`，文件名是 `SHA1(路径 + size + mtime)`，内容是 400×300 PNG；先写 `.thumb.XXXXXX` 再 `rename`，不产生半张图。缓存键不含纳秒（`GStatBuf` 在该构建下没有 `st_mtim` 字段），同一秒内改图且 size 不变的极端情况会命中旧图，属于已知取舍。
 - 视频用 `GtkVideo` 内嵌，旁边常驻 “Open externally” 按钮；无媒体后端时用户仍可外部打开，界面有提示。
 - 描述是只读 `GtkTextView`，换行按 `WORD_CHAR`，不解释标记、不做富文本。
 - 文件缺失在图片页和文件页都标 `(missing)`，不隐藏。
 
 ## 6. 仍未闭环
 
-1. 缩略图缓存（`$XDG_CACHE_HOME/rom-hamster/thumbs/`，键 = 路径 + mtime + 尺寸）未做；当前每次进详情页重新解码。
+1. 缩略图缓存没有容量上限/过期清理策略；当前只保证原子写与缓存命中，不做 LRU 或按大小回收。缓存损坏时会回退解码原图并覆盖。
 2. `GtkVideo` 只验证了控件构建，未在真实带 GStreamer 后端的桌面验证播放/暂停/无后端降级流程。
 3. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
 4. 参考机型（4 核 / 16 GB / SATA SSD / 1920×1080 / GTK 4.16）上的首屏与 10 s 滚动帧率仍未复测；本机 WSL2 的软件渲染数字只作基线记录。
@@ -142,8 +143,9 @@ bash tools/m4-import-check.sh
 
 - `SKIP_DEB=1 bash tools/m2-check.sh`：PASS 42 / FAIL 0。
 - `SKIP_DEB=1 bash tools/m3-check.sh`：M3 CHECK: ALL PASS。
-- `bash tools/m4-gui-check.sh`：M4 GUI STEP2: ALL PASS。
+- `bash tools/m4-gui-check.sh`：M4 GUI STEP2: ALL PASS；详情页冷缓存 `cache_hits=0`、热缓存 `cache_hits=1`，缓存文件 1 个。
 - `bash tools/m4-import-check.sh`：M4 IMPORT: ALL PASS。
+- `bash tools/m4-drop-check.sh`：M4 DROP: ALL PASS（两个目录共 100 个文件，rows=100）。
 - 新增单测 `/util/cancel`：复制取消返回 4 且目标不存在；解压取消返回 2 且不落文件；`meson test -C build` 5/5 通过。
 
 ### 8.3 取消语义
@@ -165,6 +167,22 @@ bash tools/m4-import-check.sh
 ### 8.5 仍未闭环
 
 1. 真实 `GtkFileDialog` 人机点选仍未自动化；smoke 用 `RH_SMOKE_IMPORT_DIR` 直接走选完目录后的路径。
-2. 拖拽导入、导入完成后自动打开详情页、导入历史/失败重试不在本步。
+2. 真实指针拖拽事件未自动化；smoke 通过 `RH_SMOKE_DROP_PATHS` 构造 `GdkFileList` 并调用同一个 `on_drop`，验证 receiver、路径过滤、多输入导入与进度刷新。导入完成后自动打开详情页、导入历史/失败重试不在本步。
 3. 压缩包取消只在单测覆盖“取消返回 2 且不落文件”；GUI 级“解压大包时取消”尚未跑真实大包夹具。
 4. 取消后的已提交条目保留策略已写在本节，但尚未写进 `ARCHITECTURE.md` 的验收口径；需要用户确认是否接受“不回滚整批”。
+
+### 8.6 缩略图磁盘缓存与拖拽导入（本轮补做）
+
+缩略图：
+
+- 目录 `$XDG_CACHE_HOME/rom-hamster/thumbs/`；键 `SHA1(400x300|路径|size|mtime)`，输出 400×300 PNG。
+- 线程里先读缓存；缓存不存在、损坏或键不匹配才解码原图。解码成功后先写 `.thumb.XXXXXX`，`g_rename` 原子替换。
+- `DetailPane` 增加 `thumb_generation`：详情页重新 `show` 时旧任务的结果直接丢弃，避免旧缩略图计数/绘制污染新详情页；`thumbs_*` 计数每次 `show` 清零。
+- 测试：同一 `XDG_CACHE_HOME` 连续两次进入 Alpha 详情。冷启动 `cache_hits=0`，`thumb_load_ms=61–63 ms`；热启动 `cache_hits=1`，`thumb_load_ms=25–29 ms`（本机 WSL2 单次值，仅作缓存路径生效的证据，不作为性能阈值）。缓存文件数 1。
+- `RH_PERF=1` 时 `perf: first_thumb_ms=... thumb_load_ms=... cache_hit=...` 可用于后续基线；`first_thumb_ms` 含 UI 调度噪声，判缓存是否生效看 `cache_hit`。
+
+拖拽：
+
+- 主窗口安装 `GtkDropTarget`，只接收 `GDK_TYPE_FILE_LIST`；`on_drop` 过滤无本地路径的 URI，把多个 `GFile` 转成 `GPtrArray<gchar*>`，复用 `start_import_paths()` / 现有两阶段导入、进度、取消、关闭保护。
+- 文件夹按钮和拖拽走同一个入口；多选时状态栏显示 `Scanning N items`。
+- 验收脚本 `tools/m4-drop-check.sh`：两个目录分别 60 + 40 个 NES，合成 `GdkFileList` 调 `on_drop`，`planned=100 imported=100 rows=100`，进度回调最大 19.3–22.9 ms；未使用真实指针拖拽，脚本注释明确标注。

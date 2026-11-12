@@ -11,4 +11,5 @@ guint      detail_pane_page_count(GtkWidget *pane);
 guint      detail_pane_video_count(GtkWidget *pane);
 guint      detail_pane_thumbs_loaded(GtkWidget *pane);
 guint      detail_pane_thumbs_started(GtkWidget *pane);
+guint      detail_pane_thumbs_cache_hits(GtkWidget *pane);
 const char *detail_pane_title(GtkWidget *pane);

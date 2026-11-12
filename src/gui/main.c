@@ -57,6 +57,7 @@ typedef struct {
   GtkButton *btn_rescan;
   guint search_timeout;
   gboolean store_open;
+  gboolean smoke_started;
   ImportState imp;
 } Gui;
 
@@ -349,14 +350,14 @@ typedef struct {
 
 typedef struct {
   Gui *g;
-  gchar *path;
+  GPtrArray *paths;
 } ImportArgs;
 
 static void import_args_free(gpointer data)
 {
   ImportArgs *a = data;
 
-  g_free(a->path);
+  g_ptr_array_unref(a->paths);
   g_free(a);
 }
 
@@ -447,7 +448,6 @@ static void import_thread(GTask *task, gpointer source, gpointer data,
 {
   ImportArgs *a = data;
   Gui *g = a->g;
-  const char *path = a->path;
   RhPlatformRules *rules = platform_rules_new();
   RhErr e = platform_rules_load_standard(rules);
   RhImportReport *rep = NULL;
@@ -472,7 +472,8 @@ static void import_thread(GTask *task, gpointer source, gpointer data,
 
     if (!rh_err_ok(&e))
       rh_err_clear(&e);
-    g_ptr_array_add(inputs, g_canonicalize_filename(path, NULL));
+    for (guint i = 0; i < a->paths->len; i++)
+      g_ptr_array_add(inputs, g_canonicalize_filename(a->paths->pdata[i], NULL));
     opts.non_interactive = TRUE;
     r->err = rh_import_run(g->ctx, rules, inputs, &opts, &rep);
     r->rep = rep;
@@ -578,11 +579,15 @@ static void on_import_done(GObject *source, GAsyncResult *res, gpointer data)
     import_result_free(r);
 }
 
-static void start_import_path(Gui *g, const char *path)
+static void start_import_paths(Gui *g, GPtrArray *paths)
 {
   GTask *task;
+  const char *first;
 
-  if (!g || !g->store_open || g->imp.running || !path || !*path)
+  if (!g || !g->store_open || g->imp.running || !paths || paths->len == 0)
+    return;
+  first = paths->pdata[0];
+  if (!first || !*first)
     return;
   g->imp.running = TRUE;
   g->imp.cancel_requested = FALSE;
@@ -611,18 +616,81 @@ static void start_import_path(Gui *g, const char *path)
   gtk_widget_set_visible(GTK_WIDGET(g->btn_cancel), TRUE);
   gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), FALSE);
   g->imp.enable_cancel_id = g_timeout_add(100, enable_cancel, g);
-  set_status(g, "Scanning %s", path);
+  if (paths->len == 1)
+    set_status(g, "Scanning %s", first);
+  else
+    set_status(g, "Scanning %u items", paths->len);
 
   task = g_task_new(NULL, NULL, on_import_done, g);
   {
     ImportArgs *a = g_new0(ImportArgs, 1);
 
     a->g = g;
-    a->path = g_strdup(path);
+    a->paths = g_ptr_array_ref(paths);
     g_task_set_task_data(task, a, import_args_free);
   }
   g_task_run_in_thread(task, import_thread);
   g_object_unref(task);
+}
+
+static void start_import_path(Gui *g, const char *path)
+{
+  GPtrArray *paths;
+
+  if (!path || !*path)
+    return;
+  paths = g_ptr_array_new_with_free_func(g_free);
+  g_ptr_array_add(paths, g_strdup(path));
+  start_import_paths(g, paths);
+  g_ptr_array_unref(paths);
+}
+
+static gboolean on_drop(GtkDropTarget *target, const GValue *value,
+                         double x, double y, gpointer data)
+{
+  Gui *g = data;
+  GdkFileList *file_list;
+  GSList *files;
+  GPtrArray *paths;
+
+  (void) target;
+  (void) x;
+  (void) y;
+  if (!g || !g->store_open || g->imp.running)
+    return FALSE;
+  if (!G_VALUE_HOLDS(value, GDK_TYPE_FILE_LIST))
+    return FALSE;
+  file_list = g_value_get_boxed(value);
+  if (!file_list)
+    return FALSE;
+  files = gdk_file_list_get_files(file_list);
+  paths = g_ptr_array_new_with_free_func(g_free);
+  for (GSList *l = files; l; l = l->next) {
+    gchar *path = g_file_get_path(G_FILE(l->data));
+
+    if (path && *path)
+      g_ptr_array_add(paths, path);
+    else
+      g_free(path);
+  }
+  if (paths->len == 0) {
+    set_status(g, "No local files to import");
+    g_ptr_array_unref(paths);
+    return FALSE;
+  }
+  start_import_paths(g, paths);
+  g_ptr_array_unref(paths);
+  return TRUE;
+}
+
+static void install_drop_target(Gui *g)
+{
+  GtkDropTarget *target = gtk_drop_target_new(GDK_TYPE_FILE_LIST,
+                                              GDK_ACTION_COPY);
+
+  g_signal_connect(target, "drop", G_CALLBACK(on_drop), g);
+  gtk_widget_add_controller(GTK_WIDGET(g->win),
+                           GTK_EVENT_CONTROLLER(target));
 }
 
 static void on_import_folder_chosen(GObject *source, GAsyncResult *res,
@@ -731,10 +799,11 @@ static gboolean smoke_detail_done(gpointer data)
 {
   Gui *g = data;
 
-  g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u videos=%u\n",
+  g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u cache_hits=%u videos=%u\n",
              detail_pane_page_count(g->detail), detail_pane_title(g->detail),
              detail_pane_thumbs_loaded(g->detail),
              detail_pane_thumbs_started(g->detail),
+             detail_pane_thumbs_cache_hits(g->detail),
              detail_pane_video_count(g->detail));
   if (g_getenv("RH_SMOKE_BACK")) {
     g_signal_emit_by_name(detail_pane_back_button(g->detail), "clicked");
@@ -852,6 +921,33 @@ static void perf_after_paint(GdkFrameClock *clock, gpointer data)
   }
 }
 
+static void smoke_drop_paths(Gui *g, const char *joined)
+{
+  gchar **parts = g_strsplit(joined, G_SEARCHPATH_SEPARATOR_S, 0);
+  GPtrArray *files = g_ptr_array_new_with_free_func(g_object_unref);
+  GdkFileList *list;
+  GValue value = G_VALUE_INIT;
+
+  for (guint i = 0; parts[i]; i++) {
+    if (*parts[i])
+      g_ptr_array_add(files, g_file_new_for_path(parts[i]));
+  }
+  if (files->len == 0) {
+    g_printerr("smoke: no drop paths\n");
+    g_ptr_array_unref(files);
+    g_strfreev(parts);
+    return;
+  }
+  list = gdk_file_list_new_from_array((GFile **) files->pdata, files->len);
+  g_value_init(&value, GDK_TYPE_FILE_LIST);
+  g_value_set_boxed(&value, list);
+  on_drop(NULL, &value, 0, 0, g);
+  g_value_unset(&value);
+  g_object_unref(list);
+  g_ptr_array_unref(files);
+  g_strfreev(parts);
+}
+
 static void on_window_map(GtkWidget *widget, gpointer data)
 {
   Gui *g = data;
@@ -873,6 +969,9 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   }
   if (!g_getenv("RH_SMOKE_TEST"))
     return;
+  if (g->smoke_started)
+    return;
+  g->smoke_started = TRUE;
 
   g_printerr("smoke: window mapped, %u row(s) in %s\n",
              g->model ? rh_game_list_model_get_count(g->model) : 0,
@@ -880,6 +979,10 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (expect && g->model &&
       rh_game_list_model_get_count(g->model) != (guint) atoi(expect))
     g_printerr("smoke: expected %s row(s)\n", expect);
+  if (g_getenv("RH_SMOKE_DROP_PATHS")) {
+    smoke_drop_paths(g, g_getenv("RH_SMOKE_DROP_PATHS"));
+    return;
+  }
   if (g_getenv("RH_SMOKE_IMPORT_DIR")) {
     const char *cancel_ms = g_getenv("RH_SMOKE_IMPORT_CANCEL_MS");
     GSource *src = NULL;
@@ -902,7 +1005,7 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (g_getenv("RH_SMOKE_DETAIL") && g->model &&
       rh_game_list_model_get_count(g->model) > 0) {
     show_detail(g, 0);
-    g_timeout_add(1200, smoke_detail_done, g);
+    g_timeout_add(2500, smoke_detail_done, g);
     return;
   }
   g_application_quit(G_APPLICATION(g->app));
@@ -962,6 +1065,7 @@ static void create_window(Gui *g)
   g_signal_connect(g->list, "activate", G_CALLBACK(on_row_activated), g);
   g_signal_connect(g->win, "map", G_CALLBACK(on_window_map), g);
   g_signal_connect(g->win, "close-request", G_CALLBACK(on_close_request), g);
+  install_drop_target(g);
   g_object_unref(g->detail);   /* stack 已持有；g->detail 仍指向同一个对象 */
   g_object_unref(b);
 }
