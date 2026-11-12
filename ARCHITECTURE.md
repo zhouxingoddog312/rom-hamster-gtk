@@ -970,7 +970,7 @@ Entware 的 `x64-k3.2` 包索引里，本项目需要的库全部存在：
 |---|---|---|
 | `rom-hamster` | `/usr/bin/rom-hamster`（CLI）、`/usr/lib/x86_64-linux-gnu/rom-hamster/libromham-1.0.so`、`/etc/rom-hamster/rom-hamster.conf`、`/etc/rom-hamster/platforms.conf`、`/etc/rom-hamster/emulators.conf`、man page | `libglib2.0-0`, `libsqlite3-0`, `libarchive13`, `zlib1g`, `libxml2` |
 | `rom-hamster-gui` | `/usr/bin/rom-hamster-gui`、`.desktop`、图标、AppStream metainfo | `rom-hamster`（= 同一版本核心）, `libgtk-4-1 (>= 4.10)`；Recommends: GTK4 GStreamer 媒体后端、`gstreamer1.0-plugins-base/-good/-libav`、`webp-pixbuf-loader` |
-| `rom-hamster-data` | `/usr/share/rom-hamster/platforms.conf`（只读出厂默认）、`/usr/share/rom-hamster/frontends/*.conf`（三份前端规格）、`rom-hamster.conf.template`、`LICENSE`、`changelog` | — |
+| `rom-hamster-data` | `/usr/share/rom-hamster/platforms.conf`（只读出厂默认）、`/usr/share/rom-hamster/emulators.conf`（只读示例）、`/usr/share/rom-hamster/frontends/*.conf`（三份前端规格）、`rom-hamster.conf.template`、`LICENSE`、`changelog` | — |
 
 ### 9.2 对 1.0.0 的一处打包修正
 
@@ -1009,7 +1009,7 @@ Entware 的 `x64-k3.2` 包索引里，本项目需要的库全部存在：
 | `disc_label_prefix` | string | `Disc` | 碟片命名前缀 |
 | `auto_delete_source` | bool | `false` | 导入成功后删除源文件 |
 
-新增键（本次引入）：`store_path`（默认 `<ROM_ROOT>/romhamster.db`）、`emulator_launch`（bool）、`lang`（默认随 `LANG`）。
+新增键（本次引入）：`store_path`（默认 `<ROM_ROOT>/romhamster.db`）、`emulator_launch`（string；全局兜底命令模板，平台专用模板优先读 `emulators.conf`，为空时只用该文件）、`lang`（默认随 `LANG`）。
 
 DAT 查找规则保持 1.0.0 语义：`<dat_dir>/<platform>.dat`（含 `.DAT` 大小写）精确优先，未命中则按 `aliases` 正则回退扫描 `<dat_dir>` 两层的 `*.dat`。
 

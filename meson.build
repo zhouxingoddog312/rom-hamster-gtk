@@ -53,6 +53,7 @@ core_sources = files(
   'src/core/platform.c',
   'src/core/query.c',
   'src/core/detail.c',
+  'src/core/emulator.c',
   'src/core/manage.c',
   'src/core/export.c',
   'src/core/store.c',
@@ -110,6 +111,7 @@ endif
 datadir_rh = join_paths(get_option('datadir'), 'rom-hamster')
 
 install_data('data/platforms.conf', install_dir : datadir_rh)
+install_data('data/emulators.conf', install_dir : datadir_rh)
 install_data('data/rom-hamster.conf.template', install_dir : datadir_rh)
 install_subdir('data/frontends', install_dir : datadir_rh)
 
@@ -156,4 +158,9 @@ if get_option('tests')
     files('tests/unit/test-util.c'),
     dependencies : libromham_dep)
   test('str-fs-hash', test_util)
+
+  test_emulator = executable('test-emulator',
+    files('tests/unit/test-emulator.c'),
+    dependencies : libromham_dep)
+  test('emulator-config', test_emulator)
 endif

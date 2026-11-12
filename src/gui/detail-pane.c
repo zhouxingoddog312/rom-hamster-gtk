@@ -4,12 +4,16 @@
 #include <glib/gstdio.h>
 
 #include "detail.h"
+#include "emulator.h"
 
 typedef struct {
   RhCtx *ctx;
   GtkStack *media;
   GtkBox *meta;
   GtkLabel *title;
+  GtkButton *launch;
+  GtkLabel *launch_status;
+  gchar *game_id;
   GtkWidget *root;
   guint thumbs_started;
   guint thumbs_loaded;
@@ -383,6 +387,51 @@ static void on_open_external(GtkButton *btn, gpointer data)
   g_free(uri);
 }
 
+static void on_launch(GtkButton *btn, gpointer data)
+{
+  DetailPane *dp = data;
+  RhGameDetail *d = NULL;
+  gchar *rom = NULL, *base = NULL;
+  RhErr e;
+
+  (void) btn;
+  if (!dp || !dp->game_id)
+    return;
+  if (dp->launch_status)
+    gtk_label_set_text(dp->launch_status, "Launching…");
+
+  e = rh_detail_load(dp->ctx, dp->game_id, &d);
+  if (!rh_err_ok(&e)) {
+    if (dp->launch_status)
+      gtk_label_set_text(dp->launch_status, e.msg);
+    return;
+  }
+  e = rh_emu_launch(dp->ctx, d, &rom);
+  if (!rh_err_ok(&e)) {
+    if (dp->launch_status)
+      gtk_label_set_text(dp->launch_status, e.msg);
+  } else {
+    base = g_path_get_basename(rom);
+    if (dp->launch_status) {
+      gchar *msg = g_strdup_printf("Launched: %s", base);
+
+      gtk_label_set_text(dp->launch_status, msg);
+      g_free(msg);
+    }
+  }
+  g_free(base);
+  g_free(rom);
+  rh_detail_free(d);
+}
+
+static void dp_free(gpointer data)
+{
+  DetailPane *dp = data;
+
+  g_free(dp->game_id);
+  g_free(dp);
+}
+
 static GtkWidget *file_page(const RhDetailGroup *group)
 {
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
@@ -470,9 +519,12 @@ GtkWidget *detail_pane_new(RhCtx *ctx)
   dp->media = GTK_STACK(gtk_builder_get_object(b, "media_stack"));
   dp->meta = GTK_BOX(gtk_builder_get_object(b, "detail_meta_box"));
   dp->title = GTK_LABEL(gtk_builder_get_object(b, "detail_title"));
+  dp->launch = GTK_BUTTON(gtk_builder_get_object(b, "btn_launch"));
+  dp->launch_status = GTK_LABEL(gtk_builder_get_object(b, "launch_status"));
   gtk_stack_switcher_set_stack(
     GTK_STACK_SWITCHER(gtk_builder_get_object(b, "media_switcher")), dp->media);
-  g_object_set_data_full(G_OBJECT(root), "dp", dp, g_free);
+  g_signal_connect(dp->launch, "clicked", G_CALLBACK(on_launch), dp);
+  g_object_set_data_full(G_OBJECT(root), "dp", dp, dp_free);
   g_object_set_data(G_OBJECT(root), "back",
                     gtk_builder_get_object(b, "btn_back"));
   g_object_ref(root);   /* builder 释放后 root 仍归调用方 */
@@ -483,6 +535,20 @@ GtkWidget *detail_pane_new(RhCtx *ctx)
 GtkWidget *detail_pane_back_button(GtkWidget *pane)
 {
   return GTK_WIDGET(g_object_get_data(G_OBJECT(pane), "back"));
+}
+
+GtkWidget *detail_pane_launch_button(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp ? GTK_WIDGET(dp->launch) : NULL;
+}
+
+const char *detail_pane_launch_status(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp && dp->launch_status ? gtk_label_get_text(dp->launch_status) : "";
 }
 
 guint detail_pane_video_count(GtkWidget *pane)
@@ -551,6 +617,10 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
   dp->thumbs_loaded = 0;
   dp->thumbs_cache_hits = 0;
   dp->videos = 0;
+  g_free(dp->game_id);
+  dp->game_id = g_strdup(game_id);
+  if (dp->launch_status)
+    gtk_label_set_text(dp->launch_status, "");
 
   e = rh_detail_load(dp->ctx, game_id, &d);
   if (!rh_err_ok(&e)) {

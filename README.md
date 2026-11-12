@@ -10,11 +10,20 @@
 
 ## 当前状态
 
-**M2 导入已完成**（2026-11-11）：`classify` / `rh-archive` / `rh-hash` / `dat` /
-`job` / `import` / `library` 七个模块 + CLI `init` / `import` / `dat` 已落地；
-两阶段导入、六级压缩包分流、多碟 + m3u + DAT 匹配、整库导入（ES / Pegasus）、
-`kill -9` 后幂等续做全部实机通过。验收 29 项全过（rar 因无压缩器 SKIP），
-M1 回归 9/9。明细见 `docs/m2-verification.md`，一键复跑 `tools/m2-check.sh`。
+**M4 进行中**（2026-11-12）：CLI 已具备 `config` / `init` / `import` / `dat` /
+`list` / `search` / `detail` / `edit` / `manage` / `export` / `run`；GTK4 前端已有
+首启、列表搜索、详情页、缩略图磁盘缓存、导入进度/取消、拖拽导入和详情页
+`Launch`。M0–M3 验收保持全绿，明细见 `docs/m4-verification.md`。
+
+`run` 与 GUI 的 `Launch` 依赖 `emulators.conf` 的平台命令模板；出厂文件只有
+注释示例，需按本机模拟器路径自行配置：
+
+```ini
+# ~/.config/rom-hamster/emulators.conf
+nes: retroarch -L /path/to/nestopia_libretro.so "%ROM%"
+```
+
+模板支持 `%ROM%`（`{file}`）与 `%DIR%`（`{dir}`）；多碟优先启动 `.m3u`。
 
 里程碑进度见 `ARCHITECTURE.md` §14：M1 存储与规则（含首个可安装 deb）→ M2 导入 →
 M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
@@ -23,12 +32,13 @@ M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
 
 | 文件 | 内容 |
 |---|---|
-| `ARCHITECTURE.md` | 架构与依赖说明（v0.2，逐板块过审后的基线）。查议题请先看文首 §0 决策索引 |
+| `ARCHITECTURE.md` | 架构与依赖说明（v0.3，逐板块过审后的基线）。查议题请先看文首 §0 决策索引 |
 | `docs/rules-verification.md` | `platforms.conf` 与 `frontends/*.conf` 的一手来源、修正清单、刻意不采纳项、存疑项 |
 | `docs/m0-verification.md` | M0 验收记录：环境、结果、与文档的偏差 |
 | `docs/m1-verification.md` | M1 验收记录：14 项证据、与 `ARCHITECTURE.md` 的 6 处偏差及理由、修掉的 8 个真实缺陷 |
 | `docs/m2-verification.md` | M2 验收记录：29 项证据、修掉的 17 个真实缺陷、未闭环清单 |
 | `data/platforms.conf` | 101 个平台规则（5 段：扩展名/街机后缀/媒体目录/媒体后缀/归档后缀） |
+| `data/emulators.conf` | 模拟器命令模板示例（出厂只有注释，不猜路径） |
 | `data/frontends/es.conf` | EmulationStation（RetroPie）导入 + 导出规格 |
 | `data/frontends/es-de.conf` | ES-DE 导入 + 导出规格 |
 | `data/frontends/pegasus.conf` | Pegasus 导入 + 导出规格 |

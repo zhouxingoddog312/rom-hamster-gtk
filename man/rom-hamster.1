@@ -8,6 +8,10 @@ rom-hamster \- 复古游戏 ROM 库管理器（命令行前端）
 .B rom-hamster
 .B config
 [\fB\-\-explain\fR \fIKEY\fR | \fB\-\-list\fR]
+.br
+.B rom-hamster
+.B run
+\fIgame-id\fR
 .SH DESCRIPTION
 .B rom-hamster
 管理一个复古游戏 ROM 库：平台判定、导入、检索、导出到前端清单（ES、ES\-DE、
@@ -18,8 +22,10 @@ Pegasus），并支持 DAT 校验。库本身是一个 SQLite 文件，默认位
 .B rom-hamster-gui
 （独立包 rom-hamster-gui），两者共享核心库 libromham\-1.0.so。
 .PP
-当前版本（0.1.0，里程碑 M1）实现了配置系统与存储层；其余子命令在后续里程碑
-逐个加入，尚未实现时调用会给出明确报错，不会静默成功。
+当前版本（0.1.0，里程碑 M4）已实现配置、存储、导入、检索、详情、管理、
+导出与图形界面；启动游戏通过
+.I emulators.conf
+的平台命令模板调用外部模拟器。
 .SH OPTIONS
 .TP
 .B \-\-version
@@ -30,10 +36,28 @@ Pegasus），并支持 DAT 校验。库本身是一个 SQLite 文件，默认位
 .TP
 .B config \-\-list
 列出全部已知配置键及其最终取值与来源层。
+.TP
+.B run \fIgame-id\fR
+按
+.I emulators.conf
+的平台命令模板启动游戏；模板中的
+.B %ROM%
+替换为选中 ROM（多碟优先 .m3u），
+.B %DIR%
+替换为游戏目录。
 .SH FILES
 .TP
 .I /usr/share/rom-hamster/platforms.conf
 出厂平台规则（只读，随 rom-hamster-data 包分发）。
+.TP
+.I /usr/share/rom-hamster/emulators.conf
+出厂模拟器命令模板（只读，通常只有注释示例）。
+.TP
+.I /etc/rom-hamster/emulators.conf
+系统管理员模拟器命令覆盖层（conffile）。
+.TP
+.I ~/.config/rom-hamster/emulators.conf
+用户模拟器命令覆盖层。
 .TP
 .I /etc/rom-hamster/platforms.conf
 系统管理员覆盖层（conffile）。

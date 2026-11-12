@@ -12,6 +12,7 @@
 
 #include "dat.h"
 #include "detail.h"
+#include "emulator.h"
 #include "export.h"
 #include "import.h"
 #include "manage.h"
@@ -547,6 +548,60 @@ int cmd_show(int argc, char **argv)
   rh_ctx_free(ctx);
   g_option_context_free(opt);
   sub_args_free(&a);
+  return rc;
+}
+
+int cmd_run(int argc, char **argv)
+{
+  SubArgs a = sub_args_new(argc, argv);
+  GOptionContext *opt = g_option_context_new("<game-id> - launch a game");
+  RhCtx *ctx;
+  RhGameDetail *d = NULL;
+  gchar *rom = NULL;
+  RhErr e;
+  int rc = 0;
+
+  g_option_context_set_help_enabled(opt, TRUE);
+  if (!g_option_context_parse(opt, &a.argc, &a.argv, NULL)) {
+    g_option_context_free(opt);
+    sub_args_free(&a);
+    return 2;
+  }
+  if (a.argc < 2) {
+    g_printerr("usage: rom-hamster run <game-id>\n");
+    g_option_context_free(opt);
+    sub_args_free(&a);
+    return 2;
+  }
+
+  ctx = make_ctx();
+  if (open_store_for(ctx, FALSE) != 0) {
+    g_option_context_free(opt);
+    sub_args_free(&a);
+    rh_ctx_free(ctx);
+    return 1;
+  }
+  e = rh_detail_load(ctx, a.argv[1], &d);
+  if (!rh_err_ok(&e)) {
+    g_printerr("run failed: %s\n", e.msg);
+    rc = 1;
+    goto out;
+  }
+  e = rh_emu_launch(ctx, d, &rom);
+  if (!rh_err_ok(&e)) {
+    g_printerr("run failed: %s\n", e.msg);
+    rc = 1;
+  } else {
+    g_print("launched: %s\n", rom);
+  }
+
+out:
+  g_free(rom);
+  rh_detail_free(d);
+  store_close(ctx);
+  g_option_context_free(opt);
+  sub_args_free(&a);
+  rh_ctx_free(ctx);
   return rc;
 }
 

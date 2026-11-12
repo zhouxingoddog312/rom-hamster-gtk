@@ -3,3 +3,4 @@ usr/lib/*/rom-hamster/libromham-1.0.so
 usr/share/man/man1/rom-hamster.1
 debian/tmp/etc/rom-hamster/platforms.conf
 debian/tmp/etc/rom-hamster/rom-hamster.conf
+debian/tmp/etc/rom-hamster/emulators.conf

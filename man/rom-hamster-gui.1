@@ -16,6 +16,13 @@ romhamster.db；已有库则直接进入主窗口。
 .PP
 核心库不链接 GTK：图形前端只负责呈现与交互，一切存储与规则判定都通过
 libromham 完成。
+.PP
+详情页的
+.B Launch
+按钮调用
+.I emulators.conf
+的平台命令模板启动外部模拟器；未配置对应平台时会在详情页显示错误，不会
+静默启动。
 .SH OPTIONS
 .PP
 不接受命令行选项。README 中给出的 ROM 根目录以配置键
@@ -37,6 +44,9 @@ GTK 4 的渲染后端。无 GPU 的环境（容器、xvfb）应设为
 .TP
 .I /usr/share/rom-hamster/platforms.conf
 出厂平台规则（只读）。
+.TP
+.I ~/.config/rom-hamster/emulators.conf
+用户模拟器命令模板；系统级覆盖在 /etc/rom-hamster/emulators.conf。
 .SH SEE ALSO
 .BR rom-hamster (1)
 .SH AUTHORS

@@ -799,6 +799,14 @@ static gboolean smoke_detail_done(gpointer data)
 {
   Gui *g = data;
 
+  if (g_getenv("RH_SMOKE_LAUNCH")) {
+    GtkWidget *btn = detail_pane_launch_button(g->detail);
+
+    if (btn)
+      g_signal_emit_by_name(btn, "clicked");
+    g_printerr("smoke: launch_status=%s\n",
+               detail_pane_launch_status(g->detail));
+  }
   g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u cache_hits=%u videos=%u\n",
              detail_pane_page_count(g->detail), detail_pane_title(g->detail),
              detail_pane_thumbs_loaded(g->detail),

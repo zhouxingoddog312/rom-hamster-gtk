@@ -9,6 +9,7 @@ int cmd_dat(int argc, char **argv);
 int cmd_list(int argc, char **argv);
 int cmd_search(int argc, char **argv);
 int cmd_show(int argc, char **argv);
+int cmd_run(int argc, char **argv);
 int cmd_edit(int argc, char **argv);
 int cmd_delete(int argc, char **argv);
 int cmd_export(int argc, char **argv);

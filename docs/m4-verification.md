@@ -10,7 +10,7 @@
 | 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
 | 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
-**明确未做**：启动游戏、真实视频后端的播放验证、真实指针拖拽事件的自动化。缩略图磁盘缓存与拖拽导入已在本轮补做。
+**明确未做**：真实视频后端的播放验证、真实指针拖拽事件的自动化。启动游戏已在本轮补做。
 
 ## 2. 验收结果
 
@@ -19,7 +19,7 @@
 ```
 build                  PASS  ninja -C build-gui
 核心库                 PASS  ldd libromham 无 gtk/gdk/pango
-unit tests             PASS  meson test 5 suites
+unit tests             PASS  meson test 6 suites
 fixture                PASS  3 games（Alpha 封面为真实 400x400 PNG）
 首次运行空目录         PASS  窗口 map、0 行、romhamster.db 已建、ROM_ROOT 已写
 已有库                 PASS  3 行
@@ -186,3 +186,14 @@ bash tools/m4-import-check.sh
 - 主窗口安装 `GtkDropTarget`，只接收 `GDK_TYPE_FILE_LIST`；`on_drop` 过滤无本地路径的 URI，把多个 `GFile` 转成 `GPtrArray<gchar*>`，复用 `start_import_paths()` / 现有两阶段导入、进度、取消、关闭保护。
 - 文件夹按钮和拖拽走同一个入口；多选时状态栏显示 `Scanning N items`。
 - 验收脚本 `tools/m4-drop-check.sh`：两个目录分别 60 + 40 个 NES，合成 `GdkFileList` 调 `on_drop`，`planned=100 imported=100 rows=100`，进度回调最大 19.3–22.9 ms；未使用真实指针拖拽，脚本注释明确标注。
+
+### 8.7 启动游戏（本轮补做）
+
+- 配置：`data/emulators.conf` 出厂只放下注释示例，不猜模拟器路径；优先级 `/usr/share/rom-hamster/emulators.conf` → `/etc/rom-hamster/emulators.conf` → `~/.config/rom-hamster/emulators.conf`，后者覆盖前者。
+- 格式 `平台ID: 命令模板`；`%ROM%` / `{file}` 替换为选中 ROM，`%DIR%` / `{dir}` 替换为游戏目录；模板缺 ROM 占位符时明确报错，不静默追加参数。
+- 平台没有条目时退回配置键 `emulator_launch`（全局兜底）；两者都空时报 `no emulator command for platform`。
+- ROM 选择：多碟优先存在的 `.m3u`，否则第一个存在的 ROM；没有可用 ROM 报错。
+- 启动：`g_shell_parse_argv` + `g_spawn_async(G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD)`，工作目录为游戏目录；`g_child_watch_add` 回收子进程，避免 GUI 僵尸。
+- GUI 详情页 HeaderBar 增加 `Launch` 按钮与结果/错误标签；CLI 新增 `rom-hamster run <game-id>`，成功打印实际 ROM，失败打印核心错误并返回 1。
+- 验收 `tools/m4-launch-check.sh`：CLI Alpha 成功、`%ROM%` 落到命令；多碟 Beta 选 `Beta.m3u`；GUI smoke 真实点击 Launch 后状态为 `Launched: Alpha.nes` 且命令收到 ROM；无 `emulators.conf` 时明确失败。结果 **M4 LAUNCH: ALL PASS**。
+- 未闭环：没有随包内置具体模拟器命令；用户必须按本机 RetroArch 核心/独立模拟器路径填写 `emulators.conf`。真实模拟器进程能否显示窗口未在 CI 中验证，测试用 `/bin/sh` 替身只验证参数传递与 spawn。

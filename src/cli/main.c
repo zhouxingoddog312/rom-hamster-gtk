@@ -121,6 +121,8 @@ int main(int argc, char **argv)
     rc = cmd_search(restc, rest);
   } else if (g_strcmp0(cmd, "show") == 0) {
     rc = cmd_show(restc, rest);
+  } else if (g_strcmp0(cmd, "run") == 0) {
+    rc = cmd_run(restc, rest);
   } else if (g_strcmp0(cmd, "edit") == 0) {
     rc = cmd_edit(restc, rest);
   } else if (g_strcmp0(cmd, "delete") == 0) {
