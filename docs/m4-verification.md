@@ -10,7 +10,7 @@
 | 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
 | 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
-**明确未做**：真实视频后端的播放验证、真实指针拖拽事件的自动化。启动游戏不在本项目范围。缩略图磁盘缓存与拖拽导入已在本轮补做。
+**明确未做**：真实指针拖拽事件的自动化。启动游戏不在本项目范围。缩略图磁盘缓存、拖拽导入与视频后端验证已在本轮补做。
 
 ## 2. 验收结果
 
@@ -25,7 +25,8 @@ fixture                PASS  3 games（Alpha 封面为真实 400x400 PNG）
 已有库                 PASS  3 行
 搜索 Alpha             PASS  1 行
 搜索 zzzz              PASS  0 行
-详情页                 PASS  pages=8 title=Alpha · nes · 1990 thumbs=1/1 videos=1
+详情页                 PASS  pages=8 title=Alpha · nes · 1990 thumbs=1/1 videos=2 video_ready=1 video_playing=1 video_errors=1
+无媒体后端             PASS  videos=2 video_ready=0 video_playing=0 video_errors=2，进程不 abort
 返回                   PASS  back stack=list
 M4 GUI STEP2: ALL PASS
 ```
@@ -66,17 +67,17 @@ M4 GUI STEP2: ALL PASS
 - 资源组固定顺序：`rom`、`covers`、`screenshots`、`videos`、`marquees`、`miximages`、`intro`、`patcher`，与 `rh_detail_group_kind()` 一致，不重复实现目录规则。
 - 图片在 `GTask` 线程池里先查磁盘缓存，再决定解码原图还是读缓存；主线程只做 `GdkTexture` 绑定；UI 不等待磁盘。
 - 缩略图缓存目录 `$XDG_CACHE_HOME/rom-hamster/thumbs/`，文件名是 `SHA1(路径 + size + mtime)`，内容是 400×300 PNG；先写 `.thumb.XXXXXX` 再 `rename`，不产生半张图。缓存键不含纳秒（`GStatBuf` 在该构建下没有 `st_mtim` 字段），同一秒内改图且 size 不变的极端情况会命中旧图，属于已知取舍。
-- 视频用 `GtkVideo` 内嵌，旁边常驻 “Open externally” 按钮；无媒体后端时用户仍可外部打开，界面有提示。
+- 视频用 `GtkVideo` 内嵌，旁边常驻 “Open externally” 按钮。构建前用 `GModule` 动态查询 GStreamer 的 `playbin3`；缺失时完全不创建媒体流，直接显示 “No inline media backend; use Open externally.”，避免 `GstPlay` 的 `g_error()` 终止进程。`GtkMediaStream` 的 `error` 属性也会触发降级：隐藏视频、显示具体错误、保留外部打开。没有给 GUI 增加 GStreamer 编译依赖。
+- 验收同时覆盖三种状态：有效 `tests/fixtures/video/sample.ogv`（6 KB Ogg/Theora）能 prepared 并进入 playing；0 字节 `Alpha-video.mp4` 进入 error 降级；`GST_PLUGIN_SYSTEM_PATH=/nonexistent` 模拟后端不可用时两个视频全部降级且进程不 abort。
 - 描述是只读 `GtkTextView`，换行按 `WORD_CHAR`，不解释标记、不做富文本。
 - 文件缺失在图片页和文件页都标 `(missing)`，不隐藏。
 
 ## 6. 仍未闭环
 
 1. 缩略图缓存没有容量上限/过期清理策略；当前只保证原子写与缓存命中，不做 LRU 或按大小回收。缓存损坏时会回退解码原图并覆盖。
-2. `GtkVideo` 只验证了控件构建，未在真实带 GStreamer 后端的桌面验证播放/暂停/无后端降级流程。
-3. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
-4. 参考机型（4 核 / 16 GB / SATA SSD / 1920×1080 / GTK 4.16）上的首屏与 10 s 滚动帧率仍未复测；本机 WSL2 的软件渲染数字只作基线记录。
-5. 真实 `GtkFileDialog` 人机点选仍未自动化。
+2. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
+3. 参考机型（4 核 / 16 GB / SATA SSD / 1920×1080 / GTK 4.16）上的首屏与 10 s 滚动帧率仍未复测；本机 WSL2 的软件渲染数字只作基线记录。
+4. 真实 `GtkFileDialog` 人机点选仍未自动化。
 
 ## 7. 10k 条性能基线
 

@@ -2,6 +2,7 @@
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib/gstdio.h>
+#include <gmodule.h>
 
 #include "detail.h"
 
@@ -16,6 +17,10 @@ typedef struct {
   guint thumbs_cache_hits;
   guint thumb_generation;
   guint videos;
+  guint video_errors;
+  guint video_ready;
+  guint video_playing;
+  GtkWidget *first_playable_video;
 } DetailPane;
 
 typedef struct {
@@ -319,42 +324,187 @@ static GtkWidget *image_page(DetailPane *dp, const RhDetailGroup *group)
 
 static void on_open_external(GtkButton *btn, gpointer data);
 
+typedef struct {
+  GtkWidget *video;
+  GtkLabel  *hint;
+  GtkWidget *root;
+  gboolean   degraded;
+  gboolean   ready;
+  gboolean   played;
+} VideoProbe;
+
+/*
+ * GtkVideo 在 GTK 的 GStreamer 后端缺少 playbin3 时会直接 g_error() 终止进程，
+ * 不会给 GtkMediaStream 设置 error。这里用 GModule 动态查询 playbin3，缺失时
+ * 根本不创建媒体流，改为外部打开。GUI 不因此增加 GStreamer 编译依赖。
+ */
+static gboolean inline_media_backend(void)
+{
+  static gint state = -1;
+  GModule *mod;
+  gpointer init_sym = NULL;
+  gpointer find_sym = NULL;
+  gpointer unref_sym = NULL;
+  gboolean ok = FALSE;
+
+  if (state >= 0)
+    return state;
+  state = 0;
+  mod = g_module_open("libgstreamer-1.0.so.0", G_MODULE_BIND_LAZY);
+  if (!mod)
+    return FALSE;
+  if (!g_module_symbol(mod, "gst_init_check", &init_sym) ||
+      !g_module_symbol(mod, "gst_element_factory_find", &find_sym))
+    return FALSE;
+  g_module_symbol(mod, "gst_object_unref", &unref_sym);
+  {
+    typedef gboolean (*InitCheck)(int *, char **, GError **);
+    typedef gpointer (*FactoryFind)(const char *);
+    typedef void (*ObjectUnref)(gpointer);
+    GError *err = NULL;
+
+    if (((InitCheck) init_sym)(NULL, NULL, &err)) {
+      gpointer factory = ((FactoryFind) find_sym)("playbin3");
+
+      if (factory) {
+        ok = TRUE;
+        if (unref_sym)
+          ((ObjectUnref) unref_sym)(factory);
+      }
+    }
+    g_clear_error(&err);
+  }
+  state = ok ? 1 : 0;
+  return ok;
+}
+
+static void degrade_video(VideoProbe *vp, const GError *err)
+{
+  DetailPane *dp;
+
+  if (!vp || !vp->video || vp->degraded)
+    return;
+  vp->degraded = TRUE;
+  gtk_widget_set_visible(vp->video, FALSE);
+  if (vp->hint) {
+    gchar *msg = g_strdup_printf(
+      "Inline playback unavailable: %s Use \"Open externally\" instead.",
+      err && err->message ? err->message : "media backend error.");
+    gtk_label_set_text(vp->hint, msg);
+    g_free(msg);
+  }
+  if (vp->root) {
+    dp = g_object_get_data(G_OBJECT(vp->root), "dp");
+    if (dp)
+      dp->video_errors++;
+  }
+}
+
+static void on_video_notify(GObject *obj, GParamSpec *pspec, gpointer data)
+{
+  VideoProbe *vp = data;
+  GtkMediaStream *stream = GTK_MEDIA_STREAM(obj);
+  const GError *err = gtk_media_stream_get_error(stream);
+  DetailPane *dp;
+
+  (void) pspec;
+  if (err) {
+    degrade_video(vp, err);
+    return;
+  }
+  if (!vp || vp->ready || !gtk_media_stream_is_prepared(stream))
+    return;
+  vp->ready = TRUE;
+  if (vp->root) {
+    dp = g_object_get_data(G_OBJECT(vp->root), "dp");
+    if (dp)
+      dp->video_ready++;
+  }
+  if (vp->hint)
+    gtk_label_set_text(vp->hint, "Inline playback ready.");
+}
+
+static void on_video_playing(GObject *obj, GParamSpec *pspec, gpointer data)
+{
+  VideoProbe *vp = data;
+  DetailPane *dp;
+
+  (void) pspec;
+  if (!vp || vp->played || !gtk_media_stream_get_playing(GTK_MEDIA_STREAM(obj)))
+    return;
+  vp->played = TRUE;
+  if (vp->root) {
+    dp = g_object_get_data(G_OBJECT(vp->root), "dp");
+    if (dp)
+      dp->video_playing++;
+  }
+}
+
 static GtkWidget *video_page(DetailPane *dp, const RhDetailGroup *group)
 {
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gboolean backend;
 
   if (group->files->len == 0) {
     GtkWidget *l = gtk_label_new("No videos.");
     gtk_widget_set_margin_top(l, 16);
     return l;
   }
+  backend = inline_media_backend();
 
   for (guint i = 0; i < group->files->len; i++) {
     RhDetailFile *f = g_ptr_array_index(group->files, i);
     GtkWidget *video = gtk_video_new();
     GtkWidget *name = gtk_label_new(f->filename);
     GtkWidget *open = gtk_button_new_with_label("Open externally");
+    GtkWidget *hint = gtk_label_new(
+      "Inline playback needs the system media backend; use Open externally if it fails.");
+    GtkMediaStream *stream = NULL;
+    VideoProbe *probe = NULL;
 
     gtk_label_set_xalign(GTK_LABEL(name), 0.0);
     gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_label_set_xalign(GTK_LABEL(hint), 0.0);
+    gtk_label_set_wrap(GTK_LABEL(hint), TRUE);
     gtk_video_set_autoplay(GTK_VIDEO(video), FALSE);
     gtk_widget_set_size_request(video, 480, 270);
-    if (f->exists) {
+    if (!backend) {
+      gtk_widget_set_visible(video, FALSE);
+      gtk_label_set_text(GTK_LABEL(hint),
+                         "No inline media backend; use Open externally.");
+      dp->video_errors++;
+    } else if (f->exists) {
       GFile *file = g_file_new_for_path(f->path);
+
       gtk_video_set_file(GTK_VIDEO(video), file);
       g_object_unref(file);
+      stream = gtk_video_get_media_stream(GTK_VIDEO(video));
+    } else {
+      gtk_widget_set_visible(video, FALSE);
+      gtk_label_set_text(GTK_LABEL(hint), "File is missing; use Open externally.");
+    }
+    if (stream) {
+      probe = g_new0(VideoProbe, 1);
+      probe->video = video;
+      probe->hint = GTK_LABEL(hint);
+      probe->root = dp->root;
+      g_object_set_data_full(G_OBJECT(stream), "video-probe", probe, g_free);
+      g_signal_connect(stream, "notify::error", G_CALLBACK(on_video_notify),
+                       probe);
+      g_signal_connect(stream, "notify::prepared", G_CALLBACK(on_video_notify),
+                       probe);
+      g_signal_connect(stream, "notify::playing", G_CALLBACK(on_video_playing),
+                       probe);
+      if (!dp->first_playable_video && f->size > 0)
+        dp->first_playable_video = video;
+      /* 后端可能在 set_file 时已同步设置 error/prepared，补一次当前状态检查。 */
+      on_video_notify(G_OBJECT(stream), NULL, probe);
     }
     gtk_box_append(GTK_BOX(box), name);
     gtk_box_append(GTK_BOX(box), video);
     gtk_box_append(GTK_BOX(box), open);
+    gtk_box_append(GTK_BOX(box), hint);
     dp->videos++;
-    {
-      GtkWidget *hint = gtk_label_new(
-        "Inline playback needs the system media backend; use Open externally if it fails.");
-      gtk_label_set_xalign(GTK_LABEL(hint), 0.0);
-      gtk_label_set_wrap(GTK_LABEL(hint), TRUE);
-      gtk_box_append(GTK_BOX(box), hint);
-    }
     g_object_set_data_full(G_OBJECT(open), "path", g_strdup(f->path), g_free);
     g_signal_connect(open, "clicked", G_CALLBACK(on_open_external), NULL);
   }
@@ -492,6 +642,51 @@ guint detail_pane_video_count(GtkWidget *pane)
   return dp ? dp->videos : 0;
 }
 
+guint detail_pane_video_errors(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp ? dp->video_errors : 0;
+}
+
+guint detail_pane_video_ready(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp ? dp->video_ready : 0;
+}
+
+guint detail_pane_video_playing(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  return dp ? dp->video_playing : 0;
+}
+
+gboolean detail_pane_play_first_video(GtkWidget *pane)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+  GtkMediaStream *stream;
+
+  if (!dp || !dp->first_playable_video)
+    return FALSE;
+  stream = gtk_video_get_media_stream(GTK_VIDEO(dp->first_playable_video));
+  if (!stream)
+    return FALSE;
+  gtk_media_stream_play(stream);
+  return TRUE;
+}
+
+gboolean detail_pane_select_page(GtkWidget *pane, const char *name)
+{
+  DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
+
+  if (!dp || !dp->media || !gtk_stack_get_child_by_name(dp->media, name))
+    return FALSE;
+  gtk_stack_set_visible_child_name(dp->media, name);
+  return TRUE;
+}
+
 guint detail_pane_thumbs_loaded(GtkWidget *pane)
 {
   DetailPane *dp = g_object_get_data(G_OBJECT(pane), "dp");
@@ -551,6 +746,10 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
   dp->thumbs_loaded = 0;
   dp->thumbs_cache_hits = 0;
   dp->videos = 0;
+  dp->video_errors = 0;
+  dp->video_ready = 0;
+  dp->video_playing = 0;
+  dp->first_playable_video = NULL;
 
   e = rh_detail_load(dp->ctx, game_id, &d);
   if (!rh_err_ok(&e)) {

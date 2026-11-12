@@ -90,6 +90,7 @@ executable('rom-hamster',
 # ---------------------------------------------------------------------------
 if get_option('gui')
   gtk_dep = dependency('gtk4', version : '>=4.10')
+  gmodule_dep = dependency('gmodule-2.0')
   gnome = import('gnome')
   gui_resources = gnome.compile_resources(
     'rom-hamster-gui-resources',
@@ -99,7 +100,7 @@ if get_option('gui')
   gui_sources = files('src/gui/main.c', 'src/gui/game-model.c', 'src/gui/detail-pane.c') + gui_resources
   executable('rom-hamster-gui',
     gui_sources,
-    dependencies : [libromham_dep, gtk_dep],
+    dependencies : [libromham_dep, gtk_dep, gmodule_dep],
     install : true,
     install_rpath : rh_rpath)
 endif

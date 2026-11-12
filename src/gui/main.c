@@ -799,12 +799,15 @@ static gboolean smoke_detail_done(gpointer data)
 {
   Gui *g = data;
 
-  g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u cache_hits=%u videos=%u\n",
+  g_printerr("smoke: detail pages=%u title=%s thumbs=%u/%u cache_hits=%u videos=%u video_ready=%u video_playing=%u video_errors=%u\n",
              detail_pane_page_count(g->detail), detail_pane_title(g->detail),
              detail_pane_thumbs_loaded(g->detail),
              detail_pane_thumbs_started(g->detail),
              detail_pane_thumbs_cache_hits(g->detail),
-             detail_pane_video_count(g->detail));
+             detail_pane_video_count(g->detail),
+             detail_pane_video_ready(g->detail),
+             detail_pane_video_playing(g->detail),
+             detail_pane_video_errors(g->detail));
   if (g_getenv("RH_SMOKE_BACK")) {
     g_signal_emit_by_name(detail_pane_back_button(g->detail), "clicked");
     g_printerr("smoke: back stack=%s\n",
@@ -1005,6 +1008,10 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   if (g_getenv("RH_SMOKE_DETAIL") && g->model &&
       rh_game_list_model_get_count(g->model) > 0) {
     show_detail(g, 0);
+    if (g_getenv("RH_SMOKE_VIDEO_TAB"))
+      detail_pane_select_page(g->detail, "videos");
+    if (g_getenv("RH_SMOKE_VIDEO_PLAY"))
+      detail_pane_play_first_video(g->detail);
     g_timeout_add(2500, smoke_detail_done, g);
     return;
   }

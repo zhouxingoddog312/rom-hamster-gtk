@@ -69,12 +69,17 @@ run_gui "$ROOT/cfg-search2" "$LIB" 3 "zzzz" 0
 echo "=== detail page: metadata + 8 groups + thumbnails + video + back"
 mkdir -p "$LIB/nes/Alpha/videos"
 : > "$LIB/nes/Alpha/videos/Alpha-video.mp4"
-python3 - "$LIB/romhamster.db" <<'PY'
+cp tests/fixtures/video/sample.ogv "$LIB/nes/Alpha/videos/Alpha-video.ogv"
+VIDEO_SIZE=$(stat -c%s tests/fixtures/video/sample.ogv)
+python3 - "$LIB/romhamster.db" "$VIDEO_SIZE" <<'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 gid = c.execute("select id from games where name='Alpha'").fetchone()[0]
+size = int(sys.argv[2])
 c.execute("insert or replace into media(game_id,kind,filename,size,sort)"
           " values(?,?,?,?,?)", (gid, "videos", "Alpha-video.mp4", 0, 0))
+c.execute("insert or replace into media(game_id,kind,filename,size,sort)"
+          " values(?,?,?,?,?)", (gid, "videos", "Alpha-video.ogv", size, 1))
 c.commit()
 PY
 DCFG="$ROOT/cfg-detail"
@@ -85,6 +90,7 @@ run_detail() {
   XDG_CONFIG_HOME="$DCFG" XDG_CACHE_HOME="$DCACHE" \
     RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$LIB" \
     RH_SMOKE_EXPECT_ROWS=3 RH_SMOKE_DETAIL=1 RH_SMOKE_BACK=1 \
+    RH_SMOKE_VIDEO_TAB=1 RH_SMOKE_VIDEO_PLAY=1 \
     RH_PERF=1 \
     xvfb-run -a "$BIN" >"$log" 2>&1
 }
@@ -94,8 +100,14 @@ grep -q "detail pages=8" "$ROOT/detail-cold.log" \
   && ok "detail has 8 media groups" || bad "detail group count"
 grep -Eq "thumbs=[1-9]/[1-9]" "$ROOT/detail-cold.log" \
   && ok "cover thumbnail decoded" || bad "thumbnail not decoded"
-grep -q "videos=1" "$ROOT/detail-cold.log" \
-  && ok "video widget built" || bad "video widget missing"
+grep -q "videos=2" "$ROOT/detail-cold.log" \
+  && ok "video widgets built (2 videos)" || bad "video widgets missing"
+grep -q "video_ready=1" "$ROOT/detail-cold.log" \
+  && ok "valid Ogg prepared by media backend" || bad "valid Ogg not prepared"
+grep -q "video_playing=1" "$ROOT/detail-cold.log" \
+  && ok "valid Ogg entered playing state" || bad "valid Ogg did not play"
+grep -q "video_errors=1" "$ROOT/detail-cold.log" \
+  && ok "invalid video degraded to external open" || bad "invalid video not degraded"
 grep -q "back stack=list" "$ROOT/detail-cold.log" \
   && ok "back returns to list" || bad "back did not return"
 grep -q "cache_hits=0" "$ROOT/detail-cold.log" \
@@ -107,6 +119,26 @@ run_detail "$ROOT/detail-warm.log"
 grep -E "smoke:|perf: first_thumb" "$ROOT/detail-warm.log"
 grep -Eq "cache_hits=[1-9]" "$ROOT/detail-warm.log" \
   && ok "warm thumbnail cache hit" || bad "warm cache did not hit"
+
+echo "=== video backend unavailable: explicit degrade, no abort"
+NOCFG="$ROOT/cfg-nobackend"
+rm -rf "$NOCFG"
+GST_PLUGIN_SYSTEM_PATH=/nonexistent GST_PLUGIN_SYSTEM_PATH_1_0=/nonexistent \
+  GST_PLUGIN_PATH= GST_REGISTRY="$ROOT/empty-gst-registry" \
+  XDG_CONFIG_HOME="$NOCFG" XDG_CACHE_HOME="$DCACHE" \
+  RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$LIB" \
+  RH_SMOKE_EXPECT_ROWS=3 RH_SMOKE_DETAIL=1 RH_SMOKE_BACK=1 \
+  RH_SMOKE_VIDEO_TAB=1 \
+  xvfb-run -a "$BIN" >"$ROOT/detail-nobackend.log" 2>&1
+grep -E "smoke:" "$ROOT/detail-nobackend.log"
+grep -q "video_ready=0" "$ROOT/detail-nobackend.log" \
+  && ok "no backend: no inline stream prepared" || bad "no backend: stream unexpectedly prepared"
+grep -q "video_playing=0" "$ROOT/detail-nobackend.log" \
+  && ok "no backend: nothing played" || bad "no backend: unexpected playback"
+grep -q "video_errors=2" "$ROOT/detail-nobackend.log" \
+  && ok "no backend: all videos degraded" || bad "no backend: restore invalid video"
+! grep -q "GStreamer-Play-ERROR" "$ROOT/detail-nobackend.log" \
+  && ok "no backend: process did not abort" || bad "no backend: GStreamer abort"
 CACHE_FILES=$(find "$DCACHE/rom-hamster/thumbs" -type f -name '*.png' 2>/dev/null | wc -l)
 if [ "$CACHE_FILES" -ge 1 ]; then
   ok "thumbnail cache files: $CACHE_FILES"
