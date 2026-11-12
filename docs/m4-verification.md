@@ -201,3 +201,27 @@ bash tools/m4-import-check.sh
 - 本机命令：`TWM=/home/zhouxin312/twm/root/usr/bin/twm XDOTOOL=/home/zhouxin312/xdt/root/usr/bin/xdotool LD_LIBRARY_PATH=/home/zhouxin312/xdt/root/usr/lib/x86_64-linux-gnu bash tools/m4-dnd-check.sh`。
 - 本机实测：`source=2100,50 target=500,350`，`smoke: import cancelled=0 planned=10 imported=10 ... rows=10`，`M4 DND: ALL PASS`。
 - 依赖缺失时脚本显式打印 `SKIP real pointer drag: xdotool/twm/xvfb-run not found`，由调用方决定是否安装；不会因缺少 GUI 自动化依赖而假通过。
+
+## 9. M4 收口（2026-11-12）
+
+全量回归：
+
+| 命令 | 结果 |
+|---|---|
+| `SKIP_DEB=1 bash tools/m2-check.sh` | PASS 42 / FAIL 0 |
+| `SKIP_DEB=1 bash tools/m3-check.sh` | M3 CHECK: ALL PASS |
+| `bash tools/m4-gui-check.sh` | M4 GUI STEP2: ALL PASS |
+| `bash tools/m4-drop-check.sh` | M4 DROP: ALL PASS |
+| `bash tools/m4-import-check.sh` | M4 IMPORT: ALL PASS |
+| `bash tools/m4-cache-check.sh` | M4 CACHE: ALL PASS |
+| `bash tools/m4-dnd-check.sh`（真实指针） | M4 DND: ALL PASS |
+| `meson test -C build-gui` | 5/5 |
+
+打包与 payload：
+
+- `bash tools/m4-close-deb.sh` 从 Linux staging 重建三个 deb：`rom-hamster` 87 KB、`rom-hamster-gui` 27 KB、`rom-hamster-data` 11 KB；已复制到 `dist/`。
+- `bash tools/m4-package-verify.sh`：三个包内均无 `emulators.conf`；CLI、GUI、man 页存在；解包后 `rom-hamster --version` 输出 `rom-hamster 0.1.0`；用包内 GUI + 包内 data 路径在 xvfb 下打开 Alpha 详情，`detail pages=8`、`thumbs=1/1`。
+- `lintian` 对三个 deb 返回 0，无输出。
+- **系统级 `dpkg -i` / `dpkg -P` 未执行**：当前 WSL 用户 uid=1000，`sudo -n` 不可用，无法在不交互输密码的情况下写系统目录。脚本显式打印 `SKIP dpkg -i / dpkg -P`，不伪造安装通过；这项留给 M5 的有 root 安装验证。
+
+收口结论：M4 功能项与可自动化验收项全部通过；不能在本机闭环的是参考机型首屏/滚动复测、真实 `GtkFileDialog` 人机点选、GUI 级大压缩包取消，以及系统级安装/卸载。它们已在 §8.5 列出，不当作已完成。
