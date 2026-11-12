@@ -7,6 +7,8 @@
 #include <gtk/gtk.h>
 #include <locale.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "detail-pane.h"
 #include "game-model.h"
@@ -35,6 +37,58 @@ typedef struct {
   guint search_timeout;
   gboolean store_open;
 } Gui;
+
+typedef struct {
+  gboolean on;
+  gboolean scroll_mode;
+  gboolean detail_mode;
+  gboolean search_mode;
+  gint64   t_start;
+  gint64   t_map;
+  gint64   t_first_paint;
+  gint64   t_search_input;
+  gint64   t_search_query;
+  gint64   scroll_start;
+  gint64   last_frame;
+  GArray  *frame_gaps;
+  guint    scroll_pos;
+  guint    scroll_timer;
+  long     rss_before;
+  gboolean scroll_active;
+  gboolean after_paint_connected;
+} Perf;
+
+static Perf P;
+
+static long rss_kb(void)
+{
+  FILE *f = fopen("/proc/self/status", "r");
+  char line[256];
+  long kb = -1;
+
+  if (!f)
+    return -1;
+  while (fgets(line, sizeof line, f)) {
+    if (sscanf(line, "VmRSS: %ld kB", &kb) == 1)
+      break;
+  }
+  fclose(f);
+  return kb;
+}
+
+static void perf_print(const char *fmt, ...)
+{
+  va_list ap;
+  gchar *msg;
+
+  if (!P.on)
+    return;
+  va_start(ap, fmt);
+  msg = g_strdup_vprintf(fmt, ap);
+  va_end(ap);
+  g_printerr("perf: %s\n", msg);
+  g_free(msg);
+}
 
 static Gui *gui_new(GtkApplication *app)
 {
@@ -119,6 +173,7 @@ static void refresh(Gui *g)
   RhErr e;
   const char *kw;
   guint shown;
+  gint64 t0 = g_get_monotonic_time();
 
   if (!g->store_open)
     return;
@@ -137,12 +192,26 @@ static void refresh(Gui *g)
   shown = rh_game_list_model_get_count(g->model);
   gtk_stack_set_visible_child_name(g->stack, shown ? "list" : "empty");
   set_status(g, "%u game(s)", shown);
+  if (P.on) {
+    gint64 now = g_get_monotonic_time();
+    perf_print("refresh_ms=%.1f rows=%u",
+               (now - t0) / 1000.0, shown);
+    if (P.t_search_query) {
+      perf_print("search_total_ms=%.1f search_query_ms=%.1f",
+                 (now - P.t_search_input) / 1000.0,
+                 (now - P.t_search_query) / 1000.0);
+      P.t_search_query = 0;
+      P.t_search_input = 0;
+    }
+  }
 }
 
 static gboolean search_timeout(gpointer data)
 {
   Gui *g = data;
   g->search_timeout = 0;
+  if (P.on && P.search_mode && P.t_search_input)
+    P.t_search_query = g_get_monotonic_time();
   refresh(g);
   return G_SOURCE_REMOVE;
 }
@@ -152,9 +221,11 @@ static void on_search_changed(GtkEditable *editable, gpointer data)
   Gui *g = data;
   (void) editable;
 
+  if (P.on && P.search_mode)
+    P.t_search_input = g_get_monotonic_time();
   if (g->search_timeout)
     g_source_remove(g->search_timeout);
-  g->search_timeout = g_timeout_add(200, search_timeout, g);
+  g->search_timeout = g_timeout_add(100, search_timeout, g);
 }
 
 static void on_refresh(GtkButton *btn, gpointer data)
@@ -327,6 +398,113 @@ static gboolean smoke_detail_done(gpointer data)
   return G_SOURCE_REMOVE;
 }
 
+static gboolean perf_quit(gpointer data)
+{
+  g_application_quit(G_APPLICATION(((Gui *) data)->app));
+  return G_SOURCE_REMOVE;
+}
+
+static void perf_scroll_stop(Gui *g)
+{
+  guint n = P.frame_gaps ? P.frame_gaps->len : 0;
+  long rss_after = rss_kb();
+  gint64 p95 = 0;
+  gint64 worst = 0;
+
+  if (P.scroll_timer) {
+    g_source_remove(P.scroll_timer);
+    P.scroll_timer = 0;
+  }
+  P.scroll_active = FALSE;
+  for (guint i = 0; i < n; i++) {
+    for (guint j = i + 1; j < n; j++) {
+      gint64 *a = &g_array_index(P.frame_gaps, gint64, i);
+      gint64 *b = &g_array_index(P.frame_gaps, gint64, j);
+      if (*a > *b) {
+        gint64 t = *a;
+        *a = *b;
+        *b = t;
+      }
+    }
+  }
+  if (n) {
+    p95 = g_array_index(P.frame_gaps, gint64, (n * 95) / 100);
+    worst = g_array_index(P.frame_gaps, gint64, n - 1);
+  }
+  perf_print("scroll_frames=%u p95_ms=%.1f max_ms=%.1f rss_delta_kb=%ld",
+             n, p95 / 1000.0, worst / 1000.0,
+             rss_after >= 0 ? rss_after - P.rss_before : -1);
+  g_application_quit(G_APPLICATION(g->app));
+}
+
+static gboolean perf_scroll_step(gpointer data)
+{
+  Gui *g = data;
+  guint count = rh_game_list_model_get_count(g->model);
+
+  if (g_get_monotonic_time() - P.scroll_start >= 10000 * 1000 ||
+      !count || !P.scroll_active) {
+    P.scroll_timer = 0;
+    perf_scroll_stop(g);
+    return G_SOURCE_REMOVE;
+  }
+  P.scroll_pos = (P.scroll_pos + 250) % count;
+#if GTK_CHECK_VERSION(4, 12, 0)
+  gtk_column_view_scroll_to(g->list, P.scroll_pos, NULL,
+                            GTK_LIST_SCROLL_NONE, NULL);
+#else
+  /* GTK 4.10 基线没有该入口；性能夹具在基线版本上显式跳过滚动项。 */
+  perf_print("scroll_skip=gtk_column_view_scroll_to_unavailable");
+  P.scroll_timer = 0;
+  P.scroll_active = FALSE;
+  g_application_quit(G_APPLICATION(g->app));
+  return G_SOURCE_REMOVE;
+#endif
+  return G_SOURCE_CONTINUE;
+}
+
+static void perf_scroll_start(Gui *g)
+{
+  P.scroll_active = TRUE;
+  P.scroll_start = g_get_monotonic_time();
+  P.last_frame = 0;
+  P.rss_before = rss_kb();
+  P.frame_gaps = g_array_new(FALSE, FALSE, sizeof(gint64));
+  P.scroll_timer = g_timeout_add(16, perf_scroll_step, g);
+  perf_print("scroll_start rows=%u", rh_game_list_model_get_count(g->model));
+}
+
+static void perf_after_paint(GdkFrameClock *clock, gpointer data)
+{
+  Gui *g = data;
+  gint64 now = g_get_monotonic_time();
+
+  (void) clock;
+  if (!P.t_first_paint) {
+    P.t_first_paint = now;
+    perf_print("first_screen_ms=%.1f rss_kb=%ld",
+               (now - P.t_map) / 1000.0, rss_kb());
+    if (P.scroll_mode) {
+      perf_scroll_start(g);
+    } else if (P.detail_mode) {
+      show_detail(g, 0);
+      g_timeout_add(2500, perf_quit, g);
+    } else if (P.search_mode) {
+      const char *kw = g_getenv("RH_PERF_SEARCH");
+      if (kw && *kw)
+        gtk_editable_set_text(GTK_EDITABLE(g->search), kw);
+      g_timeout_add(1500, perf_quit, g);
+    } else if (!g_getenv("RH_SMOKE_TEST")) {
+      g_timeout_add(100, perf_quit, g);
+    }
+  }
+  if (P.scroll_active) {
+    if (P.last_frame)
+      g_array_append_val(P.frame_gaps, (gint64){now - P.last_frame});
+    P.last_frame = now;
+  }
+}
+
 static void on_window_map(GtkWidget *widget, gpointer data)
 {
   Gui *g = data;
@@ -334,6 +512,18 @@ static void on_window_map(GtkWidget *widget, gpointer data)
   const char *kw = g_getenv("RH_SMOKE_SEARCH");
 
   (void) widget;
+  if (P.on && !P.t_map) {
+    P.t_map = g_get_monotonic_time();
+    perf_print("startup_ms=%.1f rss_kb=%ld",
+               (P.t_map - P.t_start) / 1000.0, rss_kb());
+    if (!P.after_paint_connected) {
+      GdkFrameClock *clock = gtk_widget_get_frame_clock(widget);
+      if (clock) {
+        P.after_paint_connected = TRUE;
+        g_signal_connect(clock, "after-paint", G_CALLBACK(perf_after_paint), g);
+      }
+    }
+  }
   if (!g_getenv("RH_SMOKE_TEST"))
     return;
 
@@ -421,6 +611,11 @@ static void on_activate(GtkApplication *app, gpointer data)
 int main(int argc, char **argv)
 {
   GtkApplication *app;
+  P.t_start = g_get_monotonic_time();
+  P.on = g_getenv("RH_PERF") != NULL;
+  P.scroll_mode = g_getenv("RH_PERF_SCROLL") != NULL;
+  P.detail_mode = g_getenv("RH_PERF_DETAIL") != NULL;
+  P.search_mode = g_getenv("RH_PERF_SEARCH") != NULL;
   Gui *g;
   int status;
 

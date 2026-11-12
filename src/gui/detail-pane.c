@@ -47,6 +47,9 @@ static void thumb_thread(GTask *task, gpointer source, gpointer data,
     g_task_return_error(task, err);
 }
 
+static gint64 PERF_DETAIL_T0;
+static gboolean PERF_FIRST_THUMB;
+
 static void thumb_done(GObject *source, GAsyncResult *res, gpointer data)
 {
   ThumbDone *done = data;
@@ -61,8 +64,14 @@ static void thumb_done(GObject *source, GAsyncResult *res, gpointer data)
   if (pb) {
     GdkTexture *tex = gdk_texture_new_for_pixbuf(pb);
     gtk_picture_set_paintable(GTK_PICTURE(pic), GDK_PAINTABLE(tex));
-    if (dp)
+    if (dp) {
       dp->thumbs_loaded++;
+      if (PERF_DETAIL_T0 && !PERF_FIRST_THUMB) {
+        PERF_FIRST_THUMB = TRUE;
+        g_printerr("perf: first_thumb_ms=%.1f\n",
+                   (g_get_monotonic_time() - PERF_DETAIL_T0) / 1000.0);
+      }
+    }
     g_object_unref(tex);
     g_object_unref(pb);
   } else {
@@ -420,7 +429,10 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
   RhGameDetail *d = NULL;
   RhErr e;
   gchar *title;
+  gint64 perf_t0 = g_getenv("RH_PERF") ? g_get_monotonic_time() : 0;
 
+  PERF_DETAIL_T0 = perf_t0;
+  PERF_FIRST_THUMB = FALSE;
   clear_box(dp->meta);
   clear_stack(dp->media);
 
@@ -485,5 +497,8 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
     gtk_stack_add_titled(dp->media, page, grp->kind, group_label(grp->kind));
   }
   gtk_stack_set_visible_child_name(dp->media, "rom");
+  if (perf_t0)
+    g_printerr("perf: detail_ms=%.1f\n",
+               (g_get_monotonic_time() - perf_t0) / 1000.0);
   rh_detail_free(d);
 }

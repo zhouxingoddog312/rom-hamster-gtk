@@ -6,7 +6,7 @@
 
 | 步 | 内容 |
 |---|---|
-| 1 | 首次运行弹 `GtkFileDialog` 选 `ROM_ROOT`；写用户配置、建库、直接进主窗口；`GtkColumnView` 五列；搜索 200 ms 防抖走 `rh_query_list()` |
+| 1 | 首次运行弹 `GtkFileDialog` 选 `ROM_ROOT`；写用户配置、建库、直接进主窗口；`GtkColumnView` 五列；搜索 100 ms 防抖走 `rh_query_list()` |
 | 2 | 列表激活进入详情页：`GtkGrid` 元数据、只读描述、`GtkStackSwitcher` + `GtkStack` 的 8 组资源、图片异步缩略图、视频内嵌 `GtkVideo` + 外部打开按钮、返回列表 |
 | 2 | 详情页与列表在同一个主窗口 `GtkStack` 内切换，不另开窗口 |
 
@@ -44,7 +44,7 @@ M4 GUI STEP2: ALL PASS
 | 1 | `GtkStack` 两个 child 没有名字，`set_visible_child_name()` 报 `Child name 'empty' not found` | 首启 smoke 的 Gtk-WARNING | 建窗口后 `gtk_stack_page_set_name()` 设 `list`/`empty` |
 | 2 | `gui_new()` 没保存 `GtkApplication` 指针，`g_application_quit(G_APPLICATION(NULL))` 断言失败 | smoke 退出时 GLib-CRITICAL | 结构体保存 `app` |
 | 3 | `open_library()` 先 `rh_config_set("ROM_ROOT")`（释放同键旧值），再把原 `root` 指针传给保存函数 → use-after-free，写出乱码配置并建出乱码目录 | 第二次启动读回 `ROM_ROOT=�� ISd`，项目根出现乱码目录 | 先 `g_strdup`，先落盘再覆盖运行时配置 |
-| 4 | `GtkSearchEntry::search-changed` 在程序化 `gtk_editable_set_text()` 时不触发，搜索用例不更新 | smoke 搜索 2 行不变 | 改接 `GtkEditable::changed` + 仍保留 200 ms 防抖 |
+| 4 | `GtkSearchEntry::search-changed` 在程序化 `gtk_editable_set_text()` 时不触发，搜索用例不更新 | smoke 搜索 2 行不变 | 改接 `GtkEditable::changed` + 仍保留 100 ms 防抖 |
 | 5 | GUI 链接私有 soname `libromham-1.0.so`，`dpkg-shlibdeps` 找不到 shlibs 信息，deb 构建失败 | `SKIP_DEB=0` 回归 | `debian/rules` 覆盖 `dh_shlibdeps -- --ignore-missing-info`；GUI 已显式 `Depends: rom-hamster (= ${binary:Version})` |
 
 ## 4. 第二步修掉的缺陷
@@ -74,5 +74,29 @@ M4 GUI STEP2: ALL PASS
 1. 缩略图缓存（`$XDG_CACHE_HOME/rom-hamster/thumbs/`，键 = 路径 + mtime + 尺寸）未做；当前每次进详情页重新解码。
 2. `GtkVideo` 只验证了控件构建，未在真实带 GStreamer 后端的桌面验证播放/暂停/无后端降级流程。
 3. 详情页没有右键菜单、删除/编辑入口、媒体翻页放大；这些不在本步。
-4. 10k 条性能指标仍未测；详情页冷读耗时也未计时。
+4. 参考机型（4 核 / 16 GB / SATA SSD / 1920×1080 / GTK 4.16）上的首屏与 10 s 滚动帧率仍未复测；本机 WSL2 的软件渲染数字只作基线记录。
 5. 真实 `GtkFileDialog` 人机点选仍未自动化。
+
+## 7. 10k 条性能基线
+
+夹具与脚本：
+
+- `tools/m4-perf-fixture.sh`：生成 10000 条游戏、11000 条 ROM（每 10 条一个多碟）、1501 条媒体（每 20 条三张截图，首条带真实 400×400 封面），直接写 SQLite，避免逐条 CLI 导入污染测速。
+- `tools/m4-perf.sh`：跑 3 轮启动 / 搜索 / 详情 / 10 s 滚动，原始日志在 `$HOME/.cache/romham-m4/perf/runs/`；`tools/m4-perf-report.py` 汇总为 `docs/m4-perf-baseline.md`。
+- GUI 只在 `RH_PERF=1` 时打点：`main()` → `map`、`map` → `after-paint`、搜索、详情、缩略图、`after-paint` 帧间隔、`/proc/self/status` RSS。默认不输出、不影响正常使用。
+- 本脚本是人工基线，不接入 CI；ARCHITECTURE §14.1 明确帧率/启动时间在无显示器环境测不准。
+
+本机 3 轮中位数（WSL2 / i3-10100T / 3.7 GB / Xvfb / GTK 4.22.4，非参考机型）：
+
+| 指标 | 阈值 | 实测 | 结论 |
+|---|---|---|---|
+| 冷启动 | < 1.5 s | 首轮 834.5 ms，后两轮 288.5 / 259.1 ms | 达标 |
+| 首屏 | < 300 ms | 711.4 ms | 超阈值；3 行夹具也约 690 ms，主因是 WSL 首次软件渲染，不是 10k 列表 |
+| 滚动 10 s | p95 ≤ 33 ms / max ≤ 100 ms | p95 44.3 ms / max 207.3 ms | 超阈值；同样受软件渲染限制，参考机型复测前不判发布阻断 |
+| 关键字筛选 | < 200 ms | 总 128.6 ms（查询 28.4 ms） | 达标；防抖已从 200 ms 改为 100 ms |
+| 详情元数据 | < 150 ms | 4.8 ms | 达标 |
+| 首张缩略图 | < 400 ms | 78.7 ms | 达标 |
+| 10 s 滚动 RSS 增量 | < 50 MB | 24.5 MB | 达标 |
+| 导入进度 / 取消 | ≤ 200 ms / < 1 s | SKIP | GUI 导入尚未实现，未伪造指标 |
+
+完整记录见 `docs/m4-perf-baseline.md`。
