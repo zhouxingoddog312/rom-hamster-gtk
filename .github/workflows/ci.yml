@@ -74,13 +74,37 @@ jobs:
           cd "$HOME/.cache/romham-m4/close-stage"
           lintian rom-hamster_*.deb rom-hamster-gui_*.deb rom-hamster-data_*.deb
 
-      - name: Install and purge packages
+      - name: Install packages
         run: |
           cd "$HOME/.cache/romham-m4/close-stage"
-          dpkg -i rom-hamster-data_*.deb
-          dpkg -i rom-hamster_*.deb
-          dpkg -i rom-hamster-gui_*.deb
-          rom-hamster --version
-          test -f /usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo
-          dpkg -P rom-hamster-gui rom-hamster rom-hamster-data
-          ! dpkg -s rom-hamster >/dev/null 2>&1
+          install_one() {
+            if out=$(dpkg -i "$1" 2>&1); then
+              printf '%s\n' "$out"
+              return 0
+            fi
+            printf '%s\n' "$out"
+            echo "::error::dpkg -i $1 failed: $(printf '%s' "$out" | tr '\n' '|' | cut -c1-900)"
+            return 1
+          }
+          install_one rom-hamster-data_*.deb
+          install_one rom-hamster_*.deb
+          install_one rom-hamster-gui_*.deb
+
+      - name: Verify installed binary and catalog
+        run: |
+          rom-hamster --version || { echo "::error::rom-hamster --version failed"; exit 1; }
+          test -f /usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo \
+            || { echo "::error::zh_CN catalog missing"; find /usr/share/locale -name 'rom-hamster.mo' 2>/dev/null; exit 1; }
+
+      - name: Purge packages
+        run: |
+          if ! out=$(dpkg -P rom-hamster-gui rom-hamster rom-hamster-data 2>&1); then
+            printf '%s\n' "$out"
+            echo "::error::dpkg -P failed: $(printf '%s' "$out" | tr '\n' '|' | cut -c1-900)"
+            exit 1
+          fi
+          printf '%s\n' "$out"
+          if dpkg -s rom-hamster >/dev/null 2>&1; then
+            echo "::error::rom-hamster still registered after purge"
+            exit 1
+          fi
