@@ -66,6 +66,21 @@ jobs:
             pkg-config gettext libglib2.0-dev libsqlite3-dev libarchive-dev \
             libxml2-dev zlib1g-dev libgtk-4-dev
 
+      - name: Keep translation files in the container dpkg policy
+        run: |
+          # ubuntu:24.04 镜像的 /etc/dpkg/dpkg.cfg.d/excludes 默认丢弃
+          # /usr/share/locale/*/LC_MESSAGES/*.mo（"Drop all translations"），
+          # 会把包里打好的 zh_CN catalog 在解包时删掉。只移除这一条，
+          # 文档/手册的裁剪保持原样。
+          ex=/etc/dpkg/dpkg.cfg.d/excludes
+          if [ -f "$ex" ] && grep -qF 'path-exclude=/usr/share/locale/' "$ex"; then
+            grep -vF 'path-exclude=/usr/share/locale/' "$ex" > "$ex.new"
+            mv "$ex.new" "$ex"
+            echo "removed the locale exclude rule from $ex"
+          else
+            echo "no locale exclude rule in $ex"
+          fi
+
       - name: Build packages
         run: bash tools/m4-close-deb.sh
 
