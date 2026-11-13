@@ -5,6 +5,8 @@
  * 主窗口：GtkColumnView 绑定 RhGameListModel，搜索走 rh_query_list（与 CLI 同一条查询）。
  */
 #include <gtk/gtk.h>
+#include <glib/gi18n-lib.h>
+#include <libintl.h>
 #include <locale.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -88,6 +90,16 @@ typedef struct {
 
 static Perf P;
 static RhUi GUI_UI;
+
+/* TEXTDOMAINDIR 是 gettext 自己的环境变量，优先于编译期 LOCALEDIR；
+ * 构建目录验证翻译时不必先安装。 */
+static void init_i18n(void)
+{
+  const char *dir = g_getenv("TEXTDOMAINDIR");
+
+  bindtextdomain(GETTEXT_PACKAGE, (dir && *dir) ? dir : LOCALEDIR);
+  bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
+}
 
 static long rss_kb(void)
 {
@@ -186,11 +198,11 @@ static void append_column(Gui *g, const char *title, RowField field,
 
 static void build_columns(Gui *g)
 {
-  append_column(g, "Name", rh_game_row_name, TRUE, 0);
-  append_column(g, "Platform", rh_game_row_platform, FALSE, 110);
-  append_column(g, "Year", rh_game_row_year, FALSE, 70);
-  append_column(g, "Genre", rh_game_row_genre, FALSE, 150);
-  append_column(g, "Rating", rh_game_row_rating, FALSE, 80);
+  append_column(g, _("Name"), rh_game_row_name, TRUE, 0);
+  append_column(g, _("Platform"), rh_game_row_platform, FALSE, 110);
+  append_column(g, _("Year"), rh_game_row_year, FALSE, 70);
+  append_column(g, _("Genre"), rh_game_row_genre, FALSE, 150);
+  append_column(g, _("Rating"), rh_game_row_rating, FALSE, 80);
 }
 
 /* --------------------------------------------------------------- 查询 */
@@ -213,14 +225,14 @@ static void refresh(Gui *g)
   e = rh_query_list(g->ctx, f, &games);
   rh_filter_free(f);
   if (!rh_err_ok(&e)) {
-    set_status(g, "Query failed: %s", e.msg);
+    set_status(g, _("Query failed: %s"), e.msg);
     return;
   }
 
   rh_game_list_model_set_games(g->model, games);
   shown = rh_game_list_model_get_count(g->model);
   gtk_stack_set_visible_child_name(g->stack, shown ? "list" : "empty");
-  set_status(g, "%u game(s)", shown);
+  set_status(g, g_dngettext(GETTEXT_PACKAGE, "%u game", "%u games", shown), shown);
   if (P.on) {
     gint64 now = g_get_monotonic_time();
     perf_print("refresh_ms=%.1f rows=%u",
@@ -276,7 +288,9 @@ static void on_selection_changed(GtkSelectionModel *sel, guint pos,
     set_status(g, "%s · %s · %s", rh_game_row_name(row),
                rh_game_row_platform(row), rh_game_row_year(row));
   else if (g->model)
-    set_status(g, "%u game(s)", rh_game_list_model_get_count(g->model));
+    set_status(g, g_dngettext(GETTEXT_PACKAGE, "%u game", "%u games",
+                              rh_game_list_model_get_count(g->model)),
+               rh_game_list_model_get_count(g->model));
 }
 
 static void show_detail(Gui *g, guint pos)
@@ -289,7 +303,7 @@ static void show_detail(Gui *g, guint pos)
     return;
   detail_pane_show(g->detail, rh_game_row_id(row));
   gtk_stack_set_visible_child_name(g->stack, "detail");
-  set_status(g, "Showing %s", rh_game_row_name(row));
+  set_status(g, _("Showing %s"), rh_game_row_name(row));
   g_object_unref(row);
 }
 
@@ -307,7 +321,7 @@ static void on_detail_back(GtkButton *btn, gpointer data)
 
   (void) btn;
   gtk_stack_set_visible_child_name(g->stack, n ? "list" : "empty");
-  set_status(g, "%u game(s)", n);
+  set_status(g, g_dngettext(GETTEXT_PACKAGE, "%u game", "%u games", n), n);
 }
 
 /* --------------------------------------------------------------- 打开库 */
@@ -323,7 +337,7 @@ static gboolean open_library(Gui *g, const char *root)
   e = rh_config_save_user_key("ROM_ROOT", root_copy);
   rh_config_set(g->ctx->config, "ROM_ROOT", root_copy, RH_LAYER_CLI);
   if (!rh_err_ok(&e)) {
-    set_status(g, "Cannot save configuration: %s", e.msg);
+    set_status(g, _("Cannot save configuration: %s"), e.msg);
     g_free(root_copy);
     return FALSE;
   }
@@ -331,13 +345,13 @@ static gboolean open_library(Gui *g, const char *root)
   db_path = rh_ctx_resolve_db_path(g->ctx, root_copy);
   g_free(root_copy);
   if (!db_path) {
-    set_status(g, "Cannot resolve database path");
+    set_status(g, _("Cannot resolve database path"));
     return FALSE;
   }
   e = store_open(g->ctx, db_path, STORE_OPEN_CREATE);
   g_free(db_path);
   if (!rh_err_ok(&e)) {
-    set_status(g, "Cannot open library: %s", e.msg);
+    set_status(g, _("Cannot open library: %s"), e.msg);
     return FALSE;
   }
   g->store_open = TRUE;
@@ -407,7 +421,7 @@ static gboolean update_progress_ui(gpointer data)
         gtk_progress_bar_set_fraction(g->progress,
                                       CLAMP(m->pct, 0.0, 1.0));
       gtk_progress_bar_set_text(g->progress, m->label && *m->label ? m->label : "");
-      set_status(g, "Importing: %s", m->label && *m->label ? m->label : "…");
+      set_status(g, _("Importing: %s"), m->label && *m->label ? m->label : "…");
     }
     g_object_unref(win);
   }
@@ -470,7 +484,7 @@ static void import_thread(GTask *task, gpointer source, gpointer data,
     r->err = e;
   } else if (platform_count(rules) == 0) {
     r->err = rh_fail(RH_ERR_CONFIG,
-                     "平台规则为空：请安装 rom-hamster-data，或设置 RH_PLATFORMS");
+                     "Platform rules are empty: install rom-hamster-data or set RH_PLATFORMS");
   } else {
     GPtrArray *inputs = g_ptr_array_new_with_free_func(g_free);
     RhImportOpts opts = { 0 };
@@ -497,7 +511,7 @@ static void request_import_cancel(Gui *g)
   g->imp.cancel_at = g_get_monotonic_time();
   gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), FALSE);
   rh_job_cancel(g->ctx);
-  set_status(g, "Cancelling import…");
+  set_status(g, _("Cancelling import…"));
 }
 
 static void on_cancel_clicked(GtkButton *btn, gpointer data)
@@ -548,18 +562,20 @@ static void on_import_done(GObject *source, GAsyncResult *res, gpointer data)
 
   refresh(g);
   if (!r) {
-    set_status(g, "Import failed: no result");
+    set_status(g, _("Import failed: no result"));
   } else if ((r->err.code == RH_ERR_CANCELLED) || r->cancelled) {
-    set_status(g, "Import cancelled%s",
-               g->imp.cancel_ms ? "" : " (before start)");
+    if (g->imp.cancel_ms)
+      set_status(g, _("Import cancelled"));
+    else
+      set_status(g, _("Import cancelled (before start)"));
   } else if (!rh_err_ok(&r->err)) {
-    set_status(g, "Import failed: %s", r->err.msg);
+    set_status(g, _("Import failed: %s"), r->err.msg);
   } else if (r->rep) {
-    set_status(g, "Imported %d ROM + %d media, skipped %d, failed %d",
+    set_status(g, _("Imported %d ROM + %d media, skipped %d, failed %d"),
                r->rep->imported, r->rep->media,
                r->rep->skipped, r->rep->failed);
   } else {
-    set_status(g, "Import finished");
+    set_status(g, _("Import finished"));
   }
 
   if (g_getenv("RH_SMOKE_TEST")) {
@@ -617,14 +633,16 @@ static void start_import_paths(Gui *g, GPtrArray *paths)
   gtk_widget_set_sensitive(GTK_WIDGET(g->list), FALSE);
   gtk_widget_set_visible(GTK_WIDGET(g->progress), TRUE);
   gtk_progress_bar_set_fraction(g->progress, 0.0);
-  gtk_progress_bar_set_text(g->progress, "Scanning…");
+  gtk_progress_bar_set_text(g->progress, _("Scanning…"));
   gtk_widget_set_visible(GTK_WIDGET(g->btn_cancel), TRUE);
   gtk_widget_set_sensitive(GTK_WIDGET(g->btn_cancel), FALSE);
   g->imp.enable_cancel_id = g_timeout_add(100, enable_cancel, g);
   if (paths->len == 1)
-    set_status(g, "Scanning %s", first);
+    set_status(g, _("Scanning %s"), first);
   else
-    set_status(g, "Scanning %u items", paths->len);
+    set_status(g, g_dngettext(GETTEXT_PACKAGE,
+                              "Scanning %u item", "Scanning %u items",
+                              paths->len), paths->len);
 
   task = g_task_new(NULL, NULL, on_import_done, g);
   {
@@ -679,7 +697,7 @@ static gboolean on_drop(GtkDropTarget *target, const GValue *value,
       g_free(path);
   }
   if (paths->len == 0) {
-    set_status(g, "No local files to import");
+    set_status(g, _("No local files to import"));
     g_ptr_array_unref(paths);
     return FALSE;
   }
@@ -761,7 +779,7 @@ static void on_import_folder_chosen(GObject *source, GAsyncResult *res,
   folder = gtk_file_dialog_select_folder_finish(dlg, res, &err);
   if (!folder) {
     if (!g_error_matches(err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
-      GtkAlertDialog *ad = gtk_alert_dialog_new("Cannot choose folder: %s",
+      GtkAlertDialog *ad = gtk_alert_dialog_new(_("Cannot choose folder: %s"),
                                                 err->message);
       gtk_alert_dialog_show(ad, g->win);
       g_object_unref(ad);
@@ -781,7 +799,7 @@ static void on_import_clicked(GtkButton *btn, gpointer data)
   GtkFileDialog *dlg = gtk_file_dialog_new();
 
   (void) btn;
-  gtk_file_dialog_set_title(dlg, "Import games or a folder");
+  gtk_file_dialog_set_title(dlg, _("Import games or a folder"));
   gtk_file_dialog_select_folder(dlg, g->win, NULL,
                                 on_import_folder_chosen, g);
   g_object_unref(dlg);
@@ -800,7 +818,7 @@ static void on_root_chosen(GObject *source, GAsyncResult *res, gpointer data)
   folder = gtk_file_dialog_select_folder_finish(dlg, res, &err);
   if (!folder) {
     if (!g_error_matches(err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
-      GtkAlertDialog *ad = gtk_alert_dialog_new("Cannot choose folder: %s",
+      GtkAlertDialog *ad = gtk_alert_dialog_new(_("Cannot choose folder: %s"),
                                                 err->message);
       gtk_alert_dialog_show(ad, g->win);
       g_object_unref(ad);
@@ -813,7 +831,7 @@ static void on_root_chosen(GObject *source, GAsyncResult *res, gpointer data)
   path = g_file_get_path(folder);
   if (!open_library(g, path)) {
     GtkAlertDialog *ad =
-      gtk_alert_dialog_new("Library could not be opened. See the status bar.");
+      gtk_alert_dialog_new(_("Library could not be opened. See the status bar."));
     gtk_alert_dialog_show(ad, g->win);
     g_object_unref(ad);
   }
@@ -831,7 +849,7 @@ static void choose_root(Gui *g)
   }
 
   GtkFileDialog *dlg = gtk_file_dialog_new();
-  gtk_file_dialog_set_title(dlg, "Choose ROM library folder");
+  gtk_file_dialog_set_title(dlg, _("Choose ROM library folder"));
   gtk_file_dialog_select_folder(dlg, g->win, NULL, on_root_chosen, g);
   g_object_unref(dlg);
 }
@@ -1109,7 +1127,7 @@ static gboolean on_close_request(GtkWindow *win, gpointer data)
 
   (void) win;
   if (g->imp.running) {
-    set_status(g, "Cancel the running import before closing");
+    set_status(g, _("Cancel the running import before closing"));
     return TRUE;
   }
   return FALSE;
@@ -1117,9 +1135,12 @@ static gboolean on_close_request(GtkWindow *win, gpointer data)
 
 static void create_window(Gui *g)
 {
-  GtkBuilder *b = gtk_builder_new_from_resource(
-    "/io/github/goddog312/romhamster/ui/main-window.ui");
+  GtkBuilder *b = gtk_builder_new();
   GtkButton *btn_rescan;
+
+  gtk_builder_set_translation_domain(b, GETTEXT_PACKAGE);
+  gtk_builder_add_from_resource(b,
+    "/io/github/goddog312/romhamster/ui/main-window.ui", NULL);
 
   g->win = GTK_WINDOW(gtk_builder_get_object(b, "win"));
   g->list = GTK_COLUMN_VIEW(gtk_builder_get_object(b, "list"));
@@ -1151,7 +1172,7 @@ static void create_window(Gui *g)
   g_signal_connect(g->selection, "selection-changed",
                    G_CALLBACK(on_selection_changed), g);
   g->detail = detail_pane_new(g->ctx);
-  gtk_stack_add_titled(g->stack, g->detail, "detail", "Detail");
+  gtk_stack_add_titled(g->stack, g->detail, "detail", _("Detail"));
   g_signal_connect(detail_pane_back_button(g->detail), "clicked",
                    G_CALLBACK(on_detail_back), g);
   g_signal_connect(g->list, "activate", G_CALLBACK(on_row_activated), g);
@@ -1201,6 +1222,7 @@ int main(int argc, char **argv)
   int status;
 
   setlocale(LC_ALL, "");
+  init_i18n();
 
   /* g_get_prgname 默认取 argv[0]（rom-hamster-gui），X11 的 WM_CLASS 由它决定。
    * 显式设成应用 ID，.desktop 的 StartupWMClass 才能对上（Wayland 下 GTK 本来就用

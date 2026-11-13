@@ -1,6 +1,7 @@
 #include "detail-pane.h"
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <glib/gi18n-lib.h>
 #include <glib/gstdio.h>
 #include <gmodule.h>
 #include <sys/stat.h>
@@ -372,7 +373,7 @@ static void add_description(DetailPane *dp, const char *text)
   GtkWidget *sc = gtk_scrolled_window_new();
   GtkWidget *tv = gtk_text_view_new();
 
-  add_section_label(dp, "Description");
+  add_section_label(dp, _("Description"));
   gtk_widget_set_size_request(sc, -1, 140);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sc),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -384,7 +385,7 @@ static void add_description(DetailPane *dp, const char *text)
   gtk_text_view_set_top_margin(GTK_TEXT_VIEW(tv), 6);
   gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(tv), 6);
   gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(tv)),
-                           text && *text ? text : "No description.", -1);
+                           text && *text ? text : _("No description."), -1);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(sc), tv);
   gtk_box_append(dp->meta, sc);
 }
@@ -422,14 +423,14 @@ static GtkWidget *image_page(DetailPane *dp, const RhDetailGroup *group)
     if (f->exists)
       start_thumb(dp, pic, f->path);
     else {
-      gchar *missing = g_strdup_printf("%s (missing)", f->filename);
+      gchar *missing = g_strdup_printf(_("%s (missing)"), f->filename);
       gtk_label_set_text(GTK_LABEL(name), missing);
       g_free(missing);
     }
   }
 
   if (n == 0) {
-    GtkWidget *l = gtk_label_new("No files in this group.");
+    GtkWidget *l = gtk_label_new(_("No files in this group."));
     gtk_widget_set_margin_top(l, 16);
     return l;
   }
@@ -502,8 +503,8 @@ static void degrade_video(VideoProbe *vp, const GError *err)
   gtk_widget_set_visible(vp->video, FALSE);
   if (vp->hint) {
     gchar *msg = g_strdup_printf(
-      "Inline playback unavailable: %s Use \"Open externally\" instead.",
-      err && err->message ? err->message : "media backend error.");
+      _("Inline playback unavailable: %s Use \"Open externally\" instead."),
+      err && err->message ? err->message : _("media backend error."));
     gtk_label_set_text(vp->hint, msg);
     g_free(msg);
   }
@@ -527,7 +528,7 @@ static void mark_video_ready(VideoProbe *vp)
       dp->video_ready++;
   }
   if (vp->hint)
-    gtk_label_set_text(vp->hint, "Inline playback ready.");
+    gtk_label_set_text(vp->hint, _("Inline playback ready."));
 }
 
 static void on_video_notify(GObject *obj, GParamSpec *pspec, gpointer data)
@@ -571,7 +572,7 @@ static GtkWidget *video_page(DetailPane *dp, const RhDetailGroup *group)
   gboolean backend;
 
   if (group->files->len == 0) {
-    GtkWidget *l = gtk_label_new("No videos.");
+    GtkWidget *l = gtk_label_new(_("No videos."));
     gtk_widget_set_margin_top(l, 16);
     return l;
   }
@@ -581,9 +582,9 @@ static GtkWidget *video_page(DetailPane *dp, const RhDetailGroup *group)
     RhDetailFile *f = g_ptr_array_index(group->files, i);
     GtkWidget *video = gtk_video_new();
     GtkWidget *name = gtk_label_new(f->filename);
-    GtkWidget *open = gtk_button_new_with_label("Open externally");
+    GtkWidget *open = gtk_button_new_with_label(_("Open externally"));
     GtkWidget *hint = gtk_label_new(
-      "Inline playback needs the system media backend; use Open externally if it fails.");
+      _("Inline playback needs the system media backend; use Open externally if it fails."));
     GtkMediaStream *stream = NULL;
     VideoProbe *probe = NULL;
 
@@ -596,7 +597,7 @@ static GtkWidget *video_page(DetailPane *dp, const RhDetailGroup *group)
     if (!backend) {
       gtk_widget_set_visible(video, FALSE);
       gtk_label_set_text(GTK_LABEL(hint),
-                         "No inline media backend; use Open externally.");
+                         _("No inline media backend; use Open externally."));
       dp->video_errors++;
     } else if (f->exists) {
       GFile *file = g_file_new_for_path(f->path);
@@ -606,7 +607,7 @@ static GtkWidget *video_page(DetailPane *dp, const RhDetailGroup *group)
       stream = gtk_video_get_media_stream(GTK_VIDEO(video));
     } else {
       gtk_widget_set_visible(video, FALSE);
-      gtk_label_set_text(GTK_LABEL(hint), "File is missing; use Open externally.");
+      gtk_label_set_text(GTK_LABEL(hint), _("File is missing; use Open externally."));
     }
     if (stream) {
       probe = g_new0(VideoProbe, 1);
@@ -663,7 +664,7 @@ static GtkWidget *file_page(const RhDetailGroup *group)
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
 
   if (group->files->len == 0) {
-    GtkWidget *l = gtk_label_new("No files in this group.");
+    GtkWidget *l = gtk_label_new(_("No files in this group."));
     gtk_widget_set_margin_top(l, 16);
     return l;
   }
@@ -672,7 +673,7 @@ static GtkWidget *file_page(const RhDetailGroup *group)
     gchar *size = f->size >= 0 ? g_format_size(f->size) : g_strdup("?");
     gchar *text = g_strdup_printf("%s%s    %s",
                                   f->filename,
-                                  f->exists ? "" : "  (missing)", size);
+                                  f->exists ? "" : _("  (missing)"), size);
     GtkWidget *l = gtk_label_new(text);
 
     gtk_label_set_xalign(GTK_LABEL(l), 0.0);
@@ -695,14 +696,14 @@ static gboolean is_image_group(const char *kind)
 
 static const char *group_label(const char *kind)
 {
-  if (g_strcmp0(kind, "rom") == 0) return "ROM";
-  if (g_strcmp0(kind, "covers") == 0) return "Covers";
-  if (g_strcmp0(kind, "screenshots") == 0) return "Screenshots";
-  if (g_strcmp0(kind, "videos") == 0) return "Videos";
-  if (g_strcmp0(kind, "marquees") == 0) return "Marquees";
-  if (g_strcmp0(kind, "miximages") == 0) return "Miximages";
-  if (g_strcmp0(kind, "intro") == 0) return "Manuals";
-  if (g_strcmp0(kind, "patcher") == 0) return "Patches";
+  if (g_strcmp0(kind, "rom") == 0) return _("ROM");
+  if (g_strcmp0(kind, "covers") == 0) return _("Covers");
+  if (g_strcmp0(kind, "screenshots") == 0) return _("Screenshots");
+  if (g_strcmp0(kind, "videos") == 0) return _("Videos");
+  if (g_strcmp0(kind, "marquees") == 0) return _("Marquees");
+  if (g_strcmp0(kind, "miximages") == 0) return _("Miximages");
+  if (g_strcmp0(kind, "intro") == 0) return _("Manuals");
+  if (g_strcmp0(kind, "patcher") == 0) return _("Patches");
   return kind;
 }
 
@@ -729,8 +730,16 @@ GtkWidget *detail_pane_new(RhCtx *ctx)
     g_clear_error(&err);
     return NULL;
   }
-  b = gtk_builder_new_from_string(g_bytes_get_data(bytes, NULL),
-                                  g_bytes_get_size(bytes));
+  b = gtk_builder_new();
+  gtk_builder_set_translation_domain(b, GETTEXT_PACKAGE);
+  if (!gtk_builder_add_from_string(b, g_bytes_get_data(bytes, NULL),
+                                   g_bytes_get_size(bytes), &err)) {
+    g_warning("cannot load detail UI: %s", err ? err->message : "unknown");
+    g_clear_error(&err);
+    g_bytes_unref(bytes);
+    g_object_unref(b);
+    return NULL;
+  }
   g_bytes_unref(bytes);
   root = GTK_WIDGET(gtk_builder_get_object(b, "detail_root"));
   if (!root) {
@@ -878,8 +887,8 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
 
   e = rh_detail_load(dp->ctx, game_id, &d);
   if (!rh_err_ok(&e)) {
-    gtk_label_set_text(dp->title, "Detail unavailable");
-    add_meta(dp, "Error", e.msg);
+    gtk_label_set_text(dp->title, _("Detail unavailable"));
+    add_meta(dp, _("Error"), e.msg);
     return;
   }
 
@@ -895,32 +904,32 @@ void detail_pane_show(GtkWidget *pane, const char *game_id)
   gtk_label_set_text(dp->title, title);
   g_free(title);
 
-  add_meta(dp, "Platform", d->game->platform);
+  add_meta(dp, _("Platform"), d->game->platform);
   {
     char buf[32];
     snprintf(buf, sizeof buf, "%d", d->game->year);
-    add_meta(dp, "Year", d->game->year > 0 ? buf : "");
+    add_meta(dp, _("Year"), d->game->year > 0 ? buf : "");
   }
-  add_meta(dp, "Genre", d->game->genre);
-  add_meta(dp, "Developer", d->game->developer);
-  add_meta(dp, "Publisher", d->game->publisher);
-  add_meta(dp, "Region", d->game->region);
+  add_meta(dp, _("Genre"), d->game->genre);
+  add_meta(dp, _("Developer"), d->game->developer);
+  add_meta(dp, _("Publisher"), d->game->publisher);
+  add_meta(dp, _("Region"), d->game->region);
   {
     char buf[32];
     snprintf(buf, sizeof buf, "%d", d->game->players);
-    add_meta(dp, "Players", d->game->players > 0 ? buf : "");
+    add_meta(dp, _("Players"), d->game->players > 0 ? buf : "");
   }
   {
     char buf[32];
     snprintf(buf, sizeof buf, "%.2f", d->game->rating);
-    add_meta(dp, "Rating", d->game->rating >= 0 ? buf : "");
+    add_meta(dp, _("Rating"), d->game->rating >= 0 ? buf : "");
   }
-  add_meta(dp, "Status", d->game->rom_status);
-  add_meta(dp, "Format", d->game->rom_format);
-  add_meta(dp, "Multi-disc", d->game->is_multi_disc ? "yes" : "no");
-  add_meta(dp, "Patch", d->game->patch_type);
-  add_meta(dp, "DAT", d->game->dat_source);
-  add_meta(dp, "Directory", d->game->dir_path);
+  add_meta(dp, _("Status"), d->game->rom_status);
+  add_meta(dp, _("Format"), d->game->rom_format);
+  add_meta(dp, _("Multi-disc"), d->game->is_multi_disc ? _("yes") : _("no"));
+  add_meta(dp, _("Patch"), d->game->patch_type);
+  add_meta(dp, _("DAT"), d->game->dat_source);
+  add_meta(dp, _("Directory"), d->game->dir_path);
   add_description(dp, d->game->description);
 
   for (int i = 0; i < RH_DETAIL_GROUP_COUNT; i++) {

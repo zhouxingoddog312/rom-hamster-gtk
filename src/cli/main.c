@@ -5,6 +5,8 @@
  * 文案按 §11 约定用英文 msgid，gettext 接入放到 M5。
  */
 #include <glib.h>
+#include <glib/gi18n-lib.h>
+#include <libintl.h>
 #include <locale.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,13 +18,23 @@
 
 extern const RhUi *ui_cli_get(void);   /* ui-cli.c */
 
+/* TEXTDOMAINDIR 是 gettext 自己的环境变量，优先于编译期 LOCALEDIR；
+ * 构建目录验证翻译时不必先安装。 */
+static void init_i18n(void)
+{
+  const char *dir = g_getenv("TEXTDOMAINDIR");
+
+  bindtextdomain(GETTEXT_PACKAGE, (dir && *dir) ? dir : LOCALEDIR);
+  bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
+}
+
 static void print_version(void)
 {
   g_print("%s %s\n", RH_APP_NAME, RH_VERSION);
-  g_print("maintainer: %s <%s>\n", RH_MAINTAINER, RH_MAINTAINER_EMAIL);
-  g_print("homepage: %s\n", RH_HOMEPAGE);
-  g_print("license: %s\n", RH_LICENSE);
-  g_print("schema: v%d\n", RH_SCHEMA_VERSION);
+  g_print(_("maintainer: %s <%s>\n"), RH_MAINTAINER, RH_MAINTAINER_EMAIL);
+  g_print(_("homepage: %s\n"), RH_HOMEPAGE);
+  g_print(_("license: %s\n"), RH_LICENSE);
+  g_print(_("schema: v%d\n"), RH_SCHEMA_VERSION);
 }
 
 static int cmd_config(RhConfig *cfg, int argc, char **argv)
@@ -54,13 +66,14 @@ static int cmd_config(RhConfig *cfg, int argc, char **argv)
     return 0;
   }
 
-  g_printerr("usage: rom-hamster config --explain <KEY> | --list\n");
+  g_printerr(_("usage: rom-hamster config --explain <KEY> | --list\n"));
   return 2;
 }
 
 int main(int argc, char **argv)
 {
   setlocale(LC_ALL, "");
+  init_i18n();
   gboolean show_version = FALSE;
   const char *cmd = NULL;
   gchar **rest = NULL;
@@ -68,15 +81,16 @@ int main(int argc, char **argv)
 
   GOptionEntry entries[] = {
     { "version", 'V', 0, G_OPTION_ARG_NONE, &show_version,
-      "Print version and maintainer information", NULL },
+      N_("Print version and maintainer information"), NULL },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
 
-  GOptionContext *opt = g_option_context_new("<command> — ROM collection manager");
+  GOptionContext *opt = g_option_context_new(N_("<command> — ROM collection manager"));
   GError *gerr = NULL;
 
   g_option_context_set_help_enabled(opt, TRUE);
-  g_option_context_add_main_entries(opt, entries, NULL);
+  g_option_context_set_translation_domain(opt, GETTEXT_PACKAGE);
+  g_option_context_add_main_entries(opt, entries, GETTEXT_PACKAGE);
   /* 遇到第一个非选项就停下，把子命令参数原样留给子命令 */
   g_option_context_set_strict_posix(opt, TRUE);
 
@@ -95,7 +109,7 @@ int main(int argc, char **argv)
   }
 
   if (argc < 2) {
-    g_printerr("usage: rom-hamster <command>  (try --help)\n");
+    g_printerr(_("usage: rom-hamster <command>  (try --help)\n"));
     return 2;
   }
 
@@ -130,7 +144,7 @@ int main(int argc, char **argv)
   } else if (g_strcmp0(cmd, "stats") == 0) {
     rc = cmd_stats(restc, rest);
   } else {
-    g_printerr("unknown command: %s\n", cmd);
+    g_printerr(_("unknown command: %s\n"), cmd);
     rc = 2;
   }
 

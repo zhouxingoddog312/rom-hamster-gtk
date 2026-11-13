@@ -6,6 +6,7 @@
 #include "cmds.h"
 
 #include <glib.h>
+#include <glib/gi18n-lib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <string.h>
@@ -61,12 +62,30 @@ static void sub_args_free(SubArgs *a)
   a->argc = 0;
 }
 
+/* G_GINT64_FORMAT 不能出现在 msgid 里（xgettext 会把宏当成字符串的一部分），
+ * 可翻译的格式串统一用 %s 传数值。 */
+static const char *i64str(gint64 v, char *buf, gsize size)
+{
+  g_snprintf(buf, size, "%" G_GINT64_FORMAT, v);
+  return buf;
+}
+
 static RhCtx *make_ctx(void)
 {
   RhCtx *ctx = rh_ctx_new();
 
   rh_ctx_set_ui(ctx, ui_cli_get());
   return ctx;
+}
+
+/* 选项说明用 N_() 标记、由 GOptionContext 在 --help 时翻译（GLib 约定）。 */
+static GOptionContext *opt_new(const char *param, GOptionEntry *entries)
+{
+  GOptionContext *opt = g_option_context_new(param);
+
+  g_option_context_set_translation_domain(opt, GETTEXT_PACKAGE);
+  g_option_context_add_main_entries(opt, entries, GETTEXT_PACKAGE);
+  return opt;
 }
 
 static int open_store_for(RhCtx *ctx, gboolean create)
@@ -76,13 +95,13 @@ static int open_store_for(RhCtx *ctx, gboolean create)
   RhErr e;
 
   if (!dbp) {
-    g_printerr("ROM_ROOT 未配置: 先运行 rom-hamster init --root <dir>\n");
+    g_printerr(_("ROM_ROOT is not configured: run rom-hamster init --root <dir>\n"));
     return 1;
   }
   e = store_open(ctx, dbp, create ? STORE_OPEN_CREATE : 0);
   g_free(dbp);
   if (!rh_err_ok(&e)) {
-    g_printerr("打开数据库失败: %s\n", e.msg);
+    g_printerr(_("cannot open database: %s\n"), e.msg);
     return 1;
   }
   return 0;
@@ -92,18 +111,19 @@ int cmd_init(int argc, char **argv)
 {
   const char *root = NULL, *dat_dir = NULL;
   GOptionEntry entries[] = {
-    { "root", 0, 0, G_OPTION_ARG_STRING, &root, "ROM root directory", "<dir>" },
-    { "dat-dir", 0, 0, G_OPTION_ARG_STRING, &dat_dir, "DAT directory", "<dir>" },
+    { "root", 0, 0, G_OPTION_ARG_STRING, &root,
+      N_("ROM root directory"), N_("<dir>") },
+    { "dat-dir", 0, 0, G_OPTION_ARG_STRING, &dat_dir,
+      N_("DAT directory"), N_("<dir>") },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("- initialize a ROM library");
+  GOptionContext *opt = opt_new(N_("- initialize a ROM library"), entries);
   GError *gerr = NULL;
   SubArgs a = sub_args_new(argc, argv);
   RhCtx *ctx;
   gchar *user_path;
   int rc = 0;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
   if (!g_option_context_parse(opt, &a.argc, &a.argv, &gerr)) {
     g_printerr("%s\n", gerr->message);
     g_error_free(gerr);
@@ -115,7 +135,7 @@ int cmd_init(int argc, char **argv)
   sub_args_free(&a);
 
   if (!root || !*root) {
-    g_printerr("usage: rom-hamster init --root <dir> [--dat-dir <dir>]\n");
+    g_printerr(_("usage: rom-hamster init --root <dir> [--dat-dir <dir>]\n"));
     return 2;
   }
 
@@ -144,7 +164,7 @@ int cmd_init(int argc, char **argv)
                                 dat_dir && *dat_dir ? dat_dir : "",
                                 dat_dir && *dat_dir ? "" : "");
       if (rh_fs_write_text_atomic(user_path, content, &e) != 0) {
-        g_printerr("写配置失败: %s (%s)\n", user_path, e.msg);
+        g_printerr(_("cannot write configuration: %s (%s)\n"), user_path, e.msg);
         rc = 1;
       }
       g_free(content);
@@ -152,9 +172,9 @@ int cmd_init(int argc, char **argv)
 
     if (rc == 0) {
       if (open_store_for(ctx, TRUE) == 0) {
-        g_print("ROM_ROOT: %s\n", canon);
-        g_print("store:    %s\n", ctx->db_path);
-        g_print("config:   %s\n", user_path);
+        g_print(_("ROM_ROOT: %s\n"), canon);
+        g_print(_("store:    %s\n"), ctx->db_path);
+        g_print(_("config:   %s\n"), user_path);
       } else {
         rc = 1;
       }
@@ -173,14 +193,19 @@ int cmd_import(int argc, char **argv)
   gboolean yes = FALSE, dry = FALSE, overwrite = FALSE;
   const char *root = NULL, *platforms = NULL;
   GOptionEntry entries[] = {
-    { "yes", 'y', 0, G_OPTION_ARG_NONE, &yes, "non-interactive defaults", NULL },
-    { "dry-run", 0, 0, G_OPTION_ARG_NONE, &dry, "scan only", NULL },
-    { "overwrite", 0, 0, G_OPTION_ARG_NONE, &overwrite, "overwrite differing files", NULL },
-    { "root", 0, 0, G_OPTION_ARG_STRING, &root, "override ROM_ROOT", "<dir>" },
-    { "platforms", 0, 0, G_OPTION_ARG_STRING, &platforms, "extra platform rules", "<file>" },
+    { "yes", 'y', 0, G_OPTION_ARG_NONE, &yes,
+      N_("non-interactive defaults"), NULL },
+    { "dry-run", 0, 0, G_OPTION_ARG_NONE, &dry,
+      N_("scan only"), NULL },
+    { "overwrite", 0, 0, G_OPTION_ARG_NONE, &overwrite,
+      N_("overwrite differing files"), NULL },
+    { "root", 0, 0, G_OPTION_ARG_STRING, &root,
+      N_("override ROM_ROOT"), N_("<dir>") },
+    { "platforms", 0, 0, G_OPTION_ARG_STRING, &platforms,
+      N_("extra platform rules"), N_("<file>") },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("<paths> - import ROMs and media");
+  GOptionContext *opt = opt_new(N_("<paths> - import ROMs and media"), entries);
   GError *gerr = NULL;
   SubArgs a = sub_args_new(argc, argv);
   RhCtx *ctx;
@@ -190,7 +215,6 @@ int cmd_import(int argc, char **argv)
   RhErr e = rh_ok();
   int rc = 0;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
   if (!g_option_context_parse(opt, &a.argc, &a.argv, &gerr)) {
     g_printerr("%s\n", gerr->message);
     g_error_free(gerr);
@@ -215,7 +239,7 @@ int cmd_import(int argc, char **argv)
   if (rh_err_ok(&e))
     e = platform_rules_load_standard(rules);
   if (!rh_err_ok(&e) && platform_count(rules) == 0) {
-    g_printerr("平台规则加载失败: %s\n", e.msg);
+    g_printerr(_("cannot load platform rules: %s\n"), e.msg);
     platform_rules_free(rules);
     store_close(ctx);
     sub_args_free(&a);
@@ -228,7 +252,7 @@ int cmd_import(int argc, char **argv)
     g_ptr_array_add(inputs, g_canonicalize_filename(a.argv[i], NULL));
 
   if (inputs->len == 0) {
-    g_printerr("at least one file or directory is required\n");
+    g_printerr(_("at least one file or directory is required\n"));
     rc = 2;
   } else {
     RhImportOpts opts;
@@ -242,14 +266,16 @@ int cmd_import(int argc, char **argv)
     e = rh_import_run(ctx, rules, inputs, &opts, &r);
     rep = r;
     if (!rh_err_ok(&e)) {
-      g_printerr("导入失败: %s\n", e.msg);
+      g_printerr(_("import failed: %s\n"), e.msg);
       rc = 1;
     }
   }
   if (rep) {
-    g_print("planned %d: imported %d, media %d, skipped %d, failed %d (job %" G_GINT64_FORMAT ")\n",
+    char jobbuf[32];
+
+    g_print(_("planned %d: imported %d, media %d, skipped %d, failed %d (job %s)\n"),
             rep->planned, rep->imported, rep->media, rep->skipped, rep->failed,
-            rep->job_id);
+            i64str(rep->job_id, jobbuf, sizeof jobbuf));
     if (rep->failed)
       rc = 1;
     g_free(rep);
@@ -270,7 +296,7 @@ int cmd_dat(int argc, char **argv)
   int rc = 0;
 
   if (argc < 3 || g_strcmp0(argv[0], "import") != 0) {
-    g_printerr("usage: rom-hamster dat import <platform> <file.dat>\n");
+    g_printerr(_("usage: rom-hamster dat import <platform> <file.dat>\n"));
     return 2;
   }
   ctx = make_ctx();
@@ -280,10 +306,10 @@ int cmd_dat(int argc, char **argv)
   }
   e = rh_dat_import_file(ctx, argv[1], argv[2], NULL);
   if (!rh_err_ok(&e)) {
-    g_printerr("DAT 导入失败: %s\n", e.msg);
+    g_printerr(_("DAT import failed: %s\n"), e.msg);
     rc = 1;
   } else {
-    g_print("DAT indexed: %s -> %s\n", argv[2], argv[1]);
+    g_print(_("DAT indexed: %s -> %s\n"), argv[2], argv[1]);
   }
   store_close(ctx);
   rh_ctx_free(ctx);
@@ -310,14 +336,9 @@ static int parse_common(GOptionContext *opt, SubArgs *a, const char *usage,
   return 0;
 }
 
-static const char *plural(int n)
-{
-  return n == 1 ? "" : "s";
-}
-
 static void print_games(GPtrArray *games)
 {
-  g_print("id\tname\tplatform\tyear\tgenre\trating\n");
+  g_print(_("id\tname\tplatform\tyear\tgenre\trating\n"));
   for (guint i = 0; i < games->len; i++) {
     RhGame *g = g_ptr_array_index(games, i);
     char rating[16] = "";
@@ -340,47 +361,64 @@ int cmd_list(int argc, char **argv)
   gboolean only_patch = FALSE, only_nopatch = FALSE, desc = FALSE;
   SubArgs a = sub_args_new(argc, argv);
   GOptionEntry entries[] = {
-    { "platform", 'p', 0, G_OPTION_ARG_STRING, &platform, "Platform id", "ID" },
-    { "genre", 'g', 0, G_OPTION_ARG_STRING, &genre, "Genre", "GENRE" },
-    { "developer", 'd', 0, G_OPTION_ARG_STRING, &developer, "Developer", "DEV" },
-    { "publisher", 0, 0, G_OPTION_ARG_STRING, &publisher, "Publisher", "PUB" },
-    { "region", 'r', 0, G_OPTION_ARG_STRING, &region, "Region", "REGION" },
-    { "patch-type", 0, 0, G_OPTION_ARG_STRING, &patch_type, "Patch type", "TYPE" },
-    { "year-from", 0, 0, G_OPTION_ARG_INT, &year_from, "Earliest year", "YEAR" },
-    { "year-to", 0, 0, G_OPTION_ARG_INT, &year_to, "Latest year", "YEAR" },
-    { "status", 0, 0, G_OPTION_ARG_STRING, &status, "ROM status", "STATUS" },
-    { "format", 0, 0, G_OPTION_ARG_STRING, &format, "ROM format", "FMT" },
-    { "tag", 't', 0, G_OPTION_ARG_STRING_ARRAY, &tags, "Tag (repeatable)", "TAG" },
-    { "kw", 'k', 0, G_OPTION_ARG_STRING, &kw, "Keyword (FTS)", "WORD" },
-    { "multi", 0, 0, G_OPTION_ARG_NONE, &only_multi, "Only multi-disc games", NULL },
-    { "single", 0, 0, G_OPTION_ARG_NONE, &only_single, "Only single-disc games", NULL },
-    { "has-patch", 0, 0, G_OPTION_ARG_NONE, &only_patch, "Only patched games", NULL },
-    { "no-patch", 0, 0, G_OPTION_ARG_NONE, &only_nopatch, "Only unpatched games", NULL },
-    { "sort", 's', 0, G_OPTION_ARG_STRING, &sort, "Sort: name/rating/year/discs", "KEY" },
-    { "desc", 0, 0, G_OPTION_ARG_NONE, &desc, "Descending order", NULL },
+    { "platform", 'p', 0, G_OPTION_ARG_STRING, &platform,
+      N_("Platform id"), N_("ID") },
+    { "genre", 'g', 0, G_OPTION_ARG_STRING, &genre,
+      N_("Genre"), N_("GENRE") },
+    { "developer", 'd', 0, G_OPTION_ARG_STRING, &developer,
+      N_("Developer"), N_("DEV") },
+    { "publisher", 0, 0, G_OPTION_ARG_STRING, &publisher,
+      N_("Publisher"), N_("PUB") },
+    { "region", 'r', 0, G_OPTION_ARG_STRING, &region,
+      N_("Region"), N_("REGION") },
+    { "patch-type", 0, 0, G_OPTION_ARG_STRING, &patch_type,
+      N_("Patch type"), N_("TYPE") },
+    { "year-from", 0, 0, G_OPTION_ARG_INT, &year_from,
+      N_("Earliest year"), N_("YEAR") },
+    { "year-to", 0, 0, G_OPTION_ARG_INT, &year_to,
+      N_("Latest year"), N_("YEAR") },
+    { "status", 0, 0, G_OPTION_ARG_STRING, &status,
+      N_("ROM status"), N_("STATUS") },
+    { "format", 0, 0, G_OPTION_ARG_STRING, &format,
+      N_("ROM format"), N_("FMT") },
+    { "tag", 't', 0, G_OPTION_ARG_STRING_ARRAY, &tags,
+      N_("Tag (repeatable)"), N_("TAG") },
+    { "kw", 'k', 0, G_OPTION_ARG_STRING, &kw,
+      N_("Keyword (FTS)"), N_("WORD") },
+    { "multi", 0, 0, G_OPTION_ARG_NONE, &only_multi,
+      N_("Only multi-disc games"), NULL },
+    { "single", 0, 0, G_OPTION_ARG_NONE, &only_single,
+      N_("Only single-disc games"), NULL },
+    { "has-patch", 0, 0, G_OPTION_ARG_NONE, &only_patch,
+      N_("Only patched games"), NULL },
+    { "no-patch", 0, 0, G_OPTION_ARG_NONE, &only_nopatch,
+      N_("Only unpatched games"), NULL },
+    { "sort", 's', 0, G_OPTION_ARG_STRING, &sort,
+      N_("Sort: name/rating/year/discs"), N_("KEY") },
+    { "desc", 0, 0, G_OPTION_ARG_NONE, &desc,
+      N_("Descending order"), NULL },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("- list games");
+  GOptionContext *opt = opt_new(N_("- list games"), entries);
   RhFilter f = { .multi = -1, .has_patch = -1, .sort = "name" };
   RhCtx *ctx;
   GPtrArray *games = NULL;
   RhErr e;
   int rc;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
-  rc = parse_common(opt, &a, "usage: rom-hamster list [options]", 1);
+  rc = parse_common(opt, &a, _("usage: rom-hamster list [options]"), 1);
   g_option_context_free(opt);
   if (rc) {
     sub_args_free(&a);
     return rc;
   }
   if (only_multi && only_single) {
-    g_printerr("--multi and --single are mutually exclusive\n");
+    g_printerr(_("--multi and --single are mutually exclusive\n"));
     sub_args_free(&a);
     return 2;
   }
   if (only_patch && only_nopatch) {
-    g_printerr("--has-patch and --no-patch are mutually exclusive\n");
+    g_printerr(_("--has-patch and --no-patch are mutually exclusive\n"));
     sub_args_free(&a);
     return 2;
   }
@@ -405,11 +443,11 @@ int cmd_list(int argc, char **argv)
   }
   e = rh_query_list(ctx, &f, &games);
   if (!rh_err_ok(&e)) {
-    g_printerr("query failed: %s\n", e.msg);
+    g_printerr(_("query failed: %s\n"), e.msg);
     rc = 1;
   } else {
     print_games(games);
-    g_print("%u game%s\n", games->len, plural((int) games->len));
+    g_print(g_dngettext(GETTEXT_PACKAGE, "%u game\n", "%u games\n", games->len), games->len);
   }
   if (games)
     g_ptr_array_unref(games);
@@ -424,18 +462,18 @@ int cmd_search(int argc, char **argv)
   const char *kw = NULL;
   SubArgs a = sub_args_new(argc, argv);
   GOptionEntry entries[] = {
-    { "kw", 'k', 0, G_OPTION_ARG_STRING, &kw, "Keyword", "WORD" },
+    { "kw", 'k', 0, G_OPTION_ARG_STRING, &kw,
+      N_("Keyword"), N_("WORD") },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("<keyword> - search games");
+  GOptionContext *opt = opt_new(N_("<keyword> - search games"), entries);
   RhFilter f = { .multi = -1, .has_patch = -1, .sort = "name" };
   RhCtx *ctx;
   GPtrArray *games = NULL;
   RhErr e;
   int rc;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
-  rc = parse_common(opt, &a, "usage: rom-hamster search <keyword>", 2);
+  rc = parse_common(opt, &a, _("usage: rom-hamster search <keyword>"), 2);
   if (rc) {
     g_option_context_free(opt);
     sub_args_free(&a);
@@ -452,11 +490,11 @@ int cmd_search(int argc, char **argv)
   }
   e = rh_query_list(ctx, &f, &games);
   if (!rh_err_ok(&e)) {
-    g_printerr("search failed: %s\n", e.msg);
+    g_printerr(_("search failed: %s\n"), e.msg);
     rc = 1;
   } else {
     print_games(games);
-    g_print("%u game%s\n", games->len, plural((int) games->len));
+    g_print(g_dngettext(GETTEXT_PACKAGE, "%u game\n", "%u games\n", games->len), games->len);
   }
   if (games)
     g_ptr_array_unref(games);
@@ -469,26 +507,27 @@ int cmd_search(int argc, char **argv)
 
 static const char *yn(gboolean b)
 {
-  return b ? "yes" : "no";
+  return b ? _("yes") : _("no");
 }
 
 int cmd_show(int argc, char **argv)
 {
   SubArgs a = sub_args_new(argc, argv);
-  GOptionContext *opt = g_option_context_new("<game-id> - show game detail");
+  GOptionContext *opt = g_option_context_new(N_("<game-id> - show game detail"));
   RhCtx *ctx;
   RhGameDetail *d = NULL;
   RhErr e;
   int rc;
 
   g_option_context_set_help_enabled(opt, TRUE);
+  g_option_context_set_translation_domain(opt, GETTEXT_PACKAGE);
   if (!g_option_context_parse(opt, &a.argc, &a.argv, NULL)) {
     g_option_context_free(opt);
     sub_args_free(&a);
     return 2;
   }
   if (a.argc < 2) {
-    g_printerr("usage: rom-hamster show <game-id>\n");
+    g_printerr(_("usage: rom-hamster show <game-id>\n"));
     g_option_context_free(opt);
     sub_args_free(&a);
     return 2;
@@ -503,42 +542,42 @@ int cmd_show(int argc, char **argv)
   }
   e = rh_detail_load(ctx, a.argv[1], &d);
   if (!rh_err_ok(&e)) {
-    g_printerr("show failed: %s\n", e.msg);
+    g_printerr(_("show failed: %s\n"), e.msg);
     rc = 1;
   } else {
     RhGame *g = d->game;
-    g_print("id:          %s\n", g->id);
-    g_print("name:        %s\n", g->name);
+    g_print(_("id:          %s\n"), g->id);
+    g_print(_("name:        %s\n"), g->name);
     if (g->game_main_name)
-      g_print("main name:   %s\n", g->game_main_name);
-    g_print("platform:    %s\n", g->platform);
-    g_print("directory:   %s\n", d->dir);
-    g_print("developer:   %s\n", g->developer ? g->developer : "");
-    g_print("publisher:   %s\n", g->publisher ? g->publisher : "");
-    g_print("year:        %d\n", g->year);
-    g_print("genre:       %s\n", g->genre ? g->genre : "");
-    g_print("players:     %d\n", g->players);
+      g_print(_("main name:   %s\n"), g->game_main_name);
+    g_print(_("platform:    %s\n"), g->platform);
+    g_print(_("directory:   %s\n"), d->dir);
+    g_print(_("developer:   %s\n"), g->developer ? g->developer : "");
+    g_print(_("publisher:   %s\n"), g->publisher ? g->publisher : "");
+    g_print(_("year:        %d\n"), g->year);
+    g_print(_("genre:       %s\n"), g->genre ? g->genre : "");
+    g_print(_("players:     %d\n"), g->players);
     if (g->rating >= 0)
-      g_print("rating:      %.2f\n", g->rating);
+      g_print(_("rating:      %.2f\n"), g->rating);
     else
-      g_print("rating:      unset\n");
-    g_print("region:      %s\n", g->region ? g->region : "");
-    g_print("multi-disc:  %s\n", yn(g->is_multi_disc));
-    g_print("arcade:      %s\n", yn(g->is_arcade));
-    g_print("rom format:  %s\n", g->rom_format ? g->rom_format : "");
-    g_print("rom status:  %s\n", g->rom_status ? g->rom_status : "");
-    g_print("dat source:  %s\n", g->dat_source ? g->dat_source : "");
-    g_print("patch type:  %s\n", g->patch_type ? g->patch_type : "");
+      g_print(_("rating:      unset\n"));
+    g_print(_("region:      %s\n"), g->region ? g->region : "");
+    g_print(_("multi-disc:  %s\n"), yn(g->is_multi_disc));
+    g_print(_("arcade:      %s\n"), yn(g->is_arcade));
+    g_print(_("rom format:  %s\n"), g->rom_format ? g->rom_format : "");
+    g_print(_("rom status:  %s\n"), g->rom_status ? g->rom_status : "");
+    g_print(_("dat source:  %s\n"), g->dat_source ? g->dat_source : "");
+    g_print(_("patch type:  %s\n"), g->patch_type ? g->patch_type : "");
     if (g->description && *g->description)
-      g_print("description:\n%s\n", g->description);
+      g_print(_("description:\n%s\n"), g->description);
 
     for (int k = 0; k < RH_DETAIL_GROUP_COUNT; k++) {
       RhDetailGroup *grp = &d->groups[k];
-      g_print("\n%s (%u):\n", grp->kind, grp->files->len);
+      g_print(_("\n%s (%u):\n"), grp->kind, grp->files->len);
       for (guint i = 0; i < grp->files->len; i++) {
         RhDetailFile *df = g_ptr_array_index(grp->files, i);
         g_print("  %s\t%" G_GINT64_FORMAT "\t%s\n", df->filename, df->size,
-                df->exists ? "ok" : "missing");
+                df->exists ? _("ok") : _("missing"));
       }
     }
   }
@@ -562,37 +601,50 @@ int cmd_edit(int argc, char **argv)
   gboolean clear_tags = FALSE;
   SubArgs a = sub_args_new(argc, argv);
   GOptionEntry entries[] = {
-    { "name", 'n', 0, G_OPTION_ARG_STRING, &name, "Display name", "TEXT" },
-    { "main-name", 0, 0, G_OPTION_ARG_STRING, &main_name, "Main name", "TEXT" },
-    { "description", 0, 0, G_OPTION_ARG_STRING, &description, "Description", "TEXT" },
-    { "developer", 0, 0, G_OPTION_ARG_STRING, &developer, "Developer", "TEXT" },
-    { "publisher", 0, 0, G_OPTION_ARG_STRING, &publisher, "Publisher", "TEXT" },
-    { "genre", 0, 0, G_OPTION_ARG_STRING, &genre, "Genre", "TEXT" },
-    { "region", 0, 0, G_OPTION_ARG_STRING, &region, "Region", "TEXT" },
-    { "status", 0, 0, G_OPTION_ARG_STRING, &status, "ROM status", "TEXT" },
-    { "patch-type", 0, 0, G_OPTION_ARG_STRING, &patch_type, "Patch type", "TEXT" },
-    { "year", 0, 0, G_OPTION_ARG_INT, &year, "Release year", "YEAR" },
-    { "players", 0, 0, G_OPTION_ARG_INT, &players, "Players", "N" },
-    { "rating", 0, 0, G_OPTION_ARG_DOUBLE, &rating, "Rating 0.0-1.0", "R" },
-    { "tag", 't', 0, G_OPTION_ARG_STRING_ARRAY, &tags, "Tag (repeatable)", "TAG" },
-    { "clear-tags", 0, 0, G_OPTION_ARG_NONE, &clear_tags, "Clear all tags", NULL },
+    { "name", 'n', 0, G_OPTION_ARG_STRING, &name,
+      N_("Display name"), N_("TEXT") },
+    { "main-name", 0, 0, G_OPTION_ARG_STRING, &main_name,
+      N_("Main name"), N_("TEXT") },
+    { "description", 0, 0, G_OPTION_ARG_STRING, &description,
+      N_("Description"), N_("TEXT") },
+    { "developer", 0, 0, G_OPTION_ARG_STRING, &developer,
+      N_("Developer"), N_("TEXT") },
+    { "publisher", 0, 0, G_OPTION_ARG_STRING, &publisher,
+      N_("Publisher"), N_("TEXT") },
+    { "genre", 0, 0, G_OPTION_ARG_STRING, &genre,
+      N_("Genre"), N_("TEXT") },
+    { "region", 0, 0, G_OPTION_ARG_STRING, &region,
+      N_("Region"), N_("TEXT") },
+    { "status", 0, 0, G_OPTION_ARG_STRING, &status,
+      N_("ROM status"), N_("TEXT") },
+    { "patch-type", 0, 0, G_OPTION_ARG_STRING, &patch_type,
+      N_("Patch type"), N_("TEXT") },
+    { "year", 0, 0, G_OPTION_ARG_INT, &year,
+      N_("Release year"), N_("YEAR") },
+    { "players", 0, 0, G_OPTION_ARG_INT, &players,
+      N_("Players"), N_("N") },
+    { "rating", 0, 0, G_OPTION_ARG_DOUBLE, &rating,
+      N_("Rating 0.0-1.0"), N_("R") },
+    { "tag", 't', 0, G_OPTION_ARG_STRING_ARRAY, &tags,
+      N_("Tag (repeatable)"), N_("TAG") },
+    { "clear-tags", 0, 0, G_OPTION_ARG_NONE, &clear_tags,
+      N_("Clear all tags"), NULL },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("<game-id> - edit metadata");
+  GOptionContext *opt = opt_new(N_("<game-id> - edit metadata"), entries);
   RhCtx *ctx;
   RhGamePatch p = { 0 };
   RhErr e;
   int rc;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
-  rc = parse_common(opt, &a, "usage: rom-hamster edit <game-id> [options]", 2);
+  rc = parse_common(opt, &a, _("usage: rom-hamster edit <game-id> [options]"), 2);
   if (rc) {
     g_option_context_free(opt);
     sub_args_free(&a);
     return rc;
   }
   if (clear_tags && tags) {
-    g_printerr("--tag and --clear-tags are mutually exclusive\n");
+    g_printerr(_("--tag and --clear-tags are mutually exclusive\n"));
     g_option_context_free(opt);
     sub_args_free(&a);
     return 2;
@@ -623,10 +675,10 @@ int cmd_edit(int argc, char **argv)
   }
   e = rh_manage_update(ctx, a.argv[1], &p);
   if (!rh_err_ok(&e)) {
-    g_printerr("edit failed: %s\n", e.msg);
+    g_printerr(_("edit failed: %s\n"), e.msg);
     rc = 1;
   } else {
-    g_print("updated %s\n", a.argv[1]);
+    g_print(_("updated %s\n"), a.argv[1]);
   }
   store_close(ctx);
   rh_ctx_free(ctx);
@@ -640,24 +692,25 @@ int cmd_delete(int argc, char **argv)
   gboolean files = FALSE, yes = FALSE;
   SubArgs a = sub_args_new(argc, argv);
   GOptionEntry entries[] = {
-    { "files", 'f', 0, G_OPTION_ARG_NONE, &files, "Delete game directory too", NULL },
-    { "yes", 'y', 0, G_OPTION_ARG_NONE, &yes, "Confirm deletion", NULL },
+    { "files", 'f', 0, G_OPTION_ARG_NONE, &files,
+      N_("Delete game directory too"), NULL },
+    { "yes", 'y', 0, G_OPTION_ARG_NONE, &yes,
+      N_("Confirm deletion"), NULL },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("<game-id> - delete game");
+  GOptionContext *opt = opt_new(N_("<game-id> - delete game"), entries);
   RhCtx *ctx;
   RhErr e;
   int rc;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
-  rc = parse_common(opt, &a, "usage: rom-hamster delete <game-id> [-f] -y", 2);
+  rc = parse_common(opt, &a, _("usage: rom-hamster delete <game-id> [-f] -y"), 2);
   if (rc) {
     g_option_context_free(opt);
     sub_args_free(&a);
     return rc;
   }
   if (!yes) {
-    g_printerr("refusing to delete without --yes\n");
+    g_printerr(_("refusing to delete without --yes\n"));
     g_option_context_free(opt);
     sub_args_free(&a);
     return 2;
@@ -672,10 +725,12 @@ int cmd_delete(int argc, char **argv)
   }
   e = rh_manage_delete(ctx, a.argv[1], files);
   if (!rh_err_ok(&e)) {
-    g_printerr("delete failed: %s\n", e.msg);
+    g_printerr(_("delete failed: %s\n"), e.msg);
     rc = 1;
+  } else if (files) {
+    g_print(_("deleted %s (with files)\n"), a.argv[1]);
   } else {
-    g_print("deleted %s%s\n", a.argv[1], files ? " (with files)" : "");
+    g_print(_("deleted %s\n"), a.argv[1]);
   }
   store_close(ctx);
   rh_ctx_free(ctx);
@@ -693,22 +748,35 @@ int cmd_export(int argc, char **argv)
   char **platforms = NULL, **ids = NULL;
   SubArgs a = sub_args_new(argc, argv);
   GOptionEntry entries[] = {
-    { "frontend", 'f', 0, G_OPTION_ARG_STRING, &frontend, "Frontend: es/esde/pegasus or path", "ID" },
-    { "platform", 'p', 0, G_OPTION_ARG_STRING_ARRAY, &platforms, "Platform (repeatable)", "ID" },
-    { "id", 0, 0, G_OPTION_ARG_STRING_ARRAY, &ids, "Game id (repeatable)", "ID" },
-    { "media", 'm', 0, G_OPTION_ARG_NONE, &media, "Export all media", NULL },
-    { "covers", 0, 0, G_OPTION_ARG_NONE, &covers, "Export covers", NULL },
-    { "screenshots", 0, 0, G_OPTION_ARG_NONE, &screenshots, "Export screenshots", NULL },
-    { "videos", 0, 0, G_OPTION_ARG_NONE, &videos, "Export videos", NULL },
-    { "marquees", 0, 0, G_OPTION_ARG_NONE, &marquees, "Export marquees", NULL },
-    { "miximages", 0, 0, G_OPTION_ARG_NONE, &miximages, "Export miximages", NULL },
-    { "intro", 0, 0, G_OPTION_ARG_NONE, &intro, "Export intro texts", NULL },
-    { "patcher", 0, 0, G_OPTION_ARG_NONE, &patcher, "Export patches", NULL },
-    { "no-m3u", 0, 0, G_OPTION_ARG_NONE, &no_m3u, "Do not generate m3u", NULL },
-    { "compress", 0, 0, G_OPTION_ARG_NONE, &compress, "Compressed ROM export (M3: unsupported)", NULL },
+    { "frontend", 'f', 0, G_OPTION_ARG_STRING, &frontend,
+      N_("Frontend: es/esde/pegasus or path"), N_("ID") },
+    { "platform", 'p', 0, G_OPTION_ARG_STRING_ARRAY, &platforms,
+      N_("Platform (repeatable)"), N_("ID") },
+    { "id", 0, 0, G_OPTION_ARG_STRING_ARRAY, &ids,
+      N_("Game id (repeatable)"), N_("ID") },
+    { "media", 'm', 0, G_OPTION_ARG_NONE, &media,
+      N_("Export all media"), NULL },
+    { "covers", 0, 0, G_OPTION_ARG_NONE, &covers,
+      N_("Export covers"), NULL },
+    { "screenshots", 0, 0, G_OPTION_ARG_NONE, &screenshots,
+      N_("Export screenshots"), NULL },
+    { "videos", 0, 0, G_OPTION_ARG_NONE, &videos,
+      N_("Export videos"), NULL },
+    { "marquees", 0, 0, G_OPTION_ARG_NONE, &marquees,
+      N_("Export marquees"), NULL },
+    { "miximages", 0, 0, G_OPTION_ARG_NONE, &miximages,
+      N_("Export miximages"), NULL },
+    { "intro", 0, 0, G_OPTION_ARG_NONE, &intro,
+      N_("Export intro texts"), NULL },
+    { "patcher", 0, 0, G_OPTION_ARG_NONE, &patcher,
+      N_("Export patches"), NULL },
+    { "no-m3u", 0, 0, G_OPTION_ARG_NONE, &no_m3u,
+      N_("Do not generate m3u"), NULL },
+    { "compress", 0, 0, G_OPTION_ARG_NONE, &compress,
+      N_("Compressed ROM export (M3: unsupported)"), NULL },
     { NULL, 0, 0, 0, NULL, NULL, NULL },
   };
-  GOptionContext *opt = g_option_context_new("<dest-dir> - export to a frontend");
+  GOptionContext *opt = opt_new(N_("<dest-dir> - export to a frontend"), entries);
   RhCtx *ctx;
   RhFrontend *fe = NULL;
   RhExportOpts o = { 0 };
@@ -718,9 +786,8 @@ int cmd_export(int argc, char **argv)
   RhErr e;
   int rc;
 
-  g_option_context_add_main_entries(opt, entries, NULL);
   rc = parse_common(opt, &a,
-                    "usage: rom-hamster export <dest-dir> [--frontend es|esde|pegasus]",
+                    _("usage: rom-hamster export <dest-dir> [--frontend es|esde|pegasus]"),
                     2);
   if (rc) {
     g_option_context_free(opt);
@@ -730,7 +797,7 @@ int cmd_export(int argc, char **argv)
 
   e = rh_frontend_find(frontend ? frontend : "es", &fe_path);
   if (!rh_err_ok(&e)) {
-    g_printerr("frontend error: %s\n", e.msg);
+    g_printerr(_("frontend error: %s\n"), e.msg);
     g_option_context_free(opt);
     g_free((gpointer) frontend);
     g_strfreev(platforms);
@@ -741,7 +808,7 @@ int cmd_export(int argc, char **argv)
   e = rh_frontend_load(fe_path, &fe);
   g_free(fe_path);
   if (!rh_err_ok(&e)) {
-    g_printerr("frontend error: %s\n", e.msg);
+    g_printerr(_("frontend error: %s\n"), e.msg);
     g_option_context_free(opt);
     g_free((gpointer) frontend);
     g_strfreev(platforms);
@@ -792,12 +859,16 @@ int cmd_export(int argc, char **argv)
   }
   e = rh_export_run(ctx, &o, &res);
   if (!rh_err_ok(&e)) {
-    g_printerr("export failed: %s\n", e.msg);
+    g_printerr(_("export failed: %s\n"), e.msg);
     rc = 1;
   } else {
-    g_print("exported %" G_GINT64_FORMAT " games, %" G_GINT64_FORMAT
-            " roms, %" G_GINT64_FORMAT " media; skipped %" G_GINT64_FORMAT
-            " -> %s\n", res.games, res.roms, res.media, res.skipped,
+    char b_games[32], b_roms[32], b_media[32], b_skipped[32];
+
+    g_print(_("exported %s games, %s roms, %s media; skipped %s -> %s\n"),
+            i64str(res.games, b_games, sizeof b_games),
+            i64str(res.roms, b_roms, sizeof b_roms),
+            i64str(res.media, b_media, sizeof b_media),
+            i64str(res.skipped, b_skipped, sizeof b_skipped),
             a.argv[1]);
   }
   store_close(ctx);
@@ -818,7 +889,7 @@ int cmd_export(int argc, char **argv)
 int cmd_stats(int argc, char **argv)
 {
   SubArgs a = sub_args_new(argc, argv);
-  GOptionContext *opt = g_option_context_new("- library statistics");
+  GOptionContext *opt = g_option_context_new(N_("- library statistics"));
   RhCtx *ctx;
   RhStats st = { 0 };
   GPtrArray *by_plat = NULL;
@@ -826,6 +897,7 @@ int cmd_stats(int argc, char **argv)
   int rc = 0;
 
   g_option_context_set_help_enabled(opt, TRUE);
+  g_option_context_set_translation_domain(opt, GETTEXT_PACKAGE);
   if (!g_option_context_parse(opt, &a.argc, &a.argv, NULL)) {
     g_option_context_free(opt);
     sub_args_free(&a);
@@ -840,16 +912,25 @@ int cmd_stats(int argc, char **argv)
   }
   e = rh_query_stats(ctx, &st, &by_plat);
   if (!rh_err_ok(&e)) {
-    g_printerr("stats failed: %s\n", e.msg);
+    g_printerr(_("stats failed: %s\n"), e.msg);
     rc = 1;
   } else {
-    g_print("games:       %" G_GINT64_FORMAT "\n", st.games);
-    g_print("platforms:   %" G_GINT64_FORMAT "\n", st.platforms);
-    g_print("roms:        %" G_GINT64_FORMAT "\n", st.roms);
-    g_print("media files: %" G_GINT64_FORMAT "\n", st.media_files);
-    g_print("media bytes: %" G_GINT64_FORMAT "\n", st.media_bytes);
-    g_print("dat entries: %" G_GINT64_FORMAT "\n", st.dat_entries);
-    g_print("\nplatform\tgames\tmedia bytes\n");
+    char b_games[32], b_platforms[32], b_roms[32];
+    char b_media_files[32], b_media_bytes[32], b_dat_entries[32];
+
+    g_print(_("games:       %s\n"),
+            i64str(st.games, b_games, sizeof b_games));
+    g_print(_("platforms:   %s\n"),
+            i64str(st.platforms, b_platforms, sizeof b_platforms));
+    g_print(_("roms:        %s\n"),
+            i64str(st.roms, b_roms, sizeof b_roms));
+    g_print(_("media files: %s\n"),
+            i64str(st.media_files, b_media_files, sizeof b_media_files));
+    g_print(_("media bytes: %s\n"),
+            i64str(st.media_bytes, b_media_bytes, sizeof b_media_bytes));
+    g_print(_("dat entries: %s\n"),
+            i64str(st.dat_entries, b_dat_entries, sizeof b_dat_entries));
+    g_print(_("\nplatform\tgames\tmedia bytes\n"));
     for (guint i = 0; by_plat && i < by_plat->len; i++) {
       RhPlatformStat *p = g_ptr_array_index(by_plat, i);
       g_print("%s\t%" G_GINT64_FORMAT "\t%" G_GINT64_FORMAT "\n",

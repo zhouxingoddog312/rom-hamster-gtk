@@ -17,28 +17,28 @@
             </property>
             <child type="end">
               <object class="GtkButton" id="btn_rescan">
-                <property name="label">Refresh</property>
-                <property name="tooltip-text">Reload the library list</property>
+                <property name="label" translatable="yes">Refresh</property>
+                <property name="tooltip-text" translatable="yes">Reload the library list</property>
               </object>
             </child>
             <child type="end">
               <object class="GtkButton" id="btn_import">
-                <property name="label">Import</property>
-                <property name="tooltip-text">Import a file or folder into the library</property>
+                <property name="label" translatable="yes">Import</property>
+                <property name="tooltip-text" translatable="yes">Import a file or folder into the library</property>
               </object>
             </child>
             <child type="end">
               <object class="GtkButton" id="btn_cancel">
-                <property name="label">Cancel</property>
+                <property name="label" translatable="yes">Cancel</property>
                 <property name="visible">False</property>
-                <property name="tooltip-text">Cancel the running import</property>
+                <property name="tooltip-text" translatable="yes">Cancel the running import</property>
               </object>
             </child>
           </object>
         </child>
         <child>
           <object class="GtkSearchEntry" id="search">
-            <property name="placeholder-text">Search name, genre, publisher…</property>
+            <property name="placeholder-text" translatable="yes">Search name, genre, publisher…</property>
             <property name="margin-start">12</property>
             <property name="margin-end">12</property>
             <property name="margin-top">8</property>
@@ -67,7 +67,7 @@
                 <property name="spacing">12</property>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">No games in this library yet.&#10;Drop ROM files or a folder here to import.</property>
+                    <property name="label" translatable="yes">No games in this library yet.&#10;Drop ROM files or a folder here to import.</property>
                     <attributes>
                       <attribute name="scale" value="1.3"/>
                     </attributes>
@@ -75,7 +75,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">Use Import to add a folder to this library.</property>
+                    <property name="label" translatable="yes">Use Import to add a folder to this library.</property>
                     <property name="wrap">True</property>
                     <property name="justify">center</property>
                   </object>

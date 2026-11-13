@@ -11,8 +11,8 @@
         <property name="margin-bottom">6</property>
         <child>
           <object class="GtkButton" id="btn_back">
-            <property name="label">Back</property>
-            <property name="tooltip-text">Back to the game list</property>
+            <property name="label" translatable="yes">Back</property>
+            <property name="tooltip-text" translatable="yes">Back to the game list</property>
           </object>
         </child>
         <child>

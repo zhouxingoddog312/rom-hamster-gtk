@@ -6,6 +6,7 @@
  * pick_* 会返回 NULL 让调用方走参数路径。
  */
 #include <glib.h>
+#include <glib/gi18n-lib.h>
 #include <stdio.h>
 #include <string.h>
 #include <termios.h>
@@ -34,9 +35,9 @@ static void cli_progress(void *ud, double pct, const char *label)
 {
   (void) ud;
   if (pct < 0)
-    g_printerr("\r%s ...", label ? label : "working");
+    g_printerr("\r%s ...", label ? label : _("working"));
   else
-    g_printerr("\r%s %.0f%%", label ? label : "working", pct * 100.0);
+    g_printerr("\r%s %.0f%%", label ? label : _("working"), pct * 100.0);
   fflush(stderr);
 }
 
@@ -46,7 +47,7 @@ static int cli_confirm(void *ud, const char *title, const char *msg,
   char buf[8];
   (void) ud;
 
-  g_printerr("%s\n%s [%s]: ", title, msg, default_yes ? "Y/n" : "y/N");
+  g_printerr("%s\n%s [%s]: ", title, msg, default_yes ? _("Y/n") : _("y/N"));
   if (!fgets(buf, sizeof buf, stdin))
     return default_yes;
   buf[strcspn(buf, "\n")] = '\0';
@@ -65,7 +66,7 @@ static int cli_choose(void *ud, const char *title, const char **items, int n,
   g_printerr("%s\n", title);
   for (int i = 0; i < n; i++)
     g_printerr("  %d) %s\n", i + 1, items[i]);
-  g_printerr("select [1-%d, empty = cancel]: ", n);
+  g_printerr(_("select [1-%d, empty = cancel]: "), n);
 
   if (!fgets(buf, sizeof buf, stdin))
     return -1;
@@ -101,7 +102,7 @@ static char *cli_password(void *ud, const char *title, const char *label)
   char buf[512];
   (void) ud;
 
-  g_printerr("%s — %s: ", title, label ? label : "password");
+  g_printerr("%s — %s: ", title, label ? label : _("password"));
   if (tcgetattr(STDIN_FILENO, &old) != 0)
     return NULL;
   noecho = old;
