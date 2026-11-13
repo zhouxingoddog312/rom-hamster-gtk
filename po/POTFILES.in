@@ -1,0 +1,7 @@
+src/cli/cmds.c
+src/cli/main.c
+src/cli/ui-cli.c
+src/gui/detail-pane.c
+src/gui/main.c
+src/gui/ui/detail-pane.ui
+src/gui/ui/main-window.ui

@@ -3,6 +3,7 @@ Section: utils
 Priority: optional
 Maintainer: Zhou Xin <zhouxin312@qq.com>
 Build-Depends: debhelper-compat (= 13),
+               gettext,
                meson (>= 0.61),
                ninja-build,
                pkg-config,

@@ -22,6 +22,9 @@ debian/*.debhelper
 # 临时调研下载（不入库，结论已写进 docs/rules-verification.md）
 _research/
 
+# 翻译模板由 `meson compile -C build-gui rom-hamster-pot` 生成
+po/*.pot
+
 # M5 截图中间产物：XWD 原始 dump 与窗口列表只用于本地排障，成品 PNG 才入库
 data/screenshots/*.xwd
 data/screenshots/windows.txt

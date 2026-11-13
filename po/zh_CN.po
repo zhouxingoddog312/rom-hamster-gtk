@@ -1,0 +1,1016 @@
+# Chinese (Simplified) translation for rom-hamster.
+# Copyright (C) 2026 Zhou Xin
+# This file is distributed under the same license as the rom-hamster package.
+# Zhou Xin <zhouxin312@qq.com>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: rom-hamster 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-13 00:00+0800\n"
+"PO-Revision-Date: 2026-11-13 00:00+0800\n"
+"Last-Translator: Zhou Xin <zhouxin312@qq.com>\n"
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/cli/cmds.c:98
+#, c-format
+msgid "ROM_ROOT is not configured: run rom-hamster init --root <dir>\n"
+msgstr "ROM_ROOT 未配置：请先运行 rom-hamster init --root <dir>\n"
+
+#: src/cli/cmds.c:104
+#, c-format
+msgid "cannot open database: %s\n"
+msgstr "无法打开数据库：%s\n"
+
+#: src/cli/cmds.c:115
+msgid "ROM root directory"
+msgstr "ROM 根目录"
+
+#: src/cli/cmds.c:115 src/cli/cmds.c:117 src/cli/cmds.c:203
+msgid "<dir>"
+msgstr "<目录>"
+
+#: src/cli/cmds.c:117
+msgid "DAT directory"
+msgstr "DAT 目录"
+
+#: src/cli/cmds.c:120
+msgid "- initialize a ROM library"
+msgstr "- 初始化 ROM 库"
+
+#: src/cli/cmds.c:138
+#, c-format
+msgid "usage: rom-hamster init --root <dir> [--dat-dir <dir>]\n"
+msgstr "用法: rom-hamster init --root <目录> [--dat-dir <目录>]\n"
+
+#: src/cli/cmds.c:167
+#, c-format
+msgid "cannot write configuration: %s (%s)\n"
+msgstr "无法写入配置：%s（%s）\n"
+
+#: src/cli/cmds.c:175
+#, c-format
+msgid "ROM_ROOT: %s\n"
+msgstr "ROM_ROOT：%s\n"
+
+#: src/cli/cmds.c:176
+#, c-format
+msgid "store:    %s\n"
+msgstr "数据库:   %s\n"
+
+#: src/cli/cmds.c:177
+#, c-format
+msgid "config:   %s\n"
+msgstr "配置:     %s\n"
+
+#: src/cli/cmds.c:197
+msgid "non-interactive defaults"
+msgstr "使用非交互默认值"
+
+#: src/cli/cmds.c:199
+msgid "scan only"
+msgstr "仅扫描"
+
+#: src/cli/cmds.c:201
+msgid "overwrite differing files"
+msgstr "覆盖内容不同的文件"
+
+#: src/cli/cmds.c:203
+msgid "override ROM_ROOT"
+msgstr "覆盖 ROM_ROOT"
+
+#: src/cli/cmds.c:205
+msgid "extra platform rules"
+msgstr "额外的平台规则"
+
+#: src/cli/cmds.c:205
+msgid "<file>"
+msgstr "<文件>"
+
+#: src/cli/cmds.c:208
+msgid "<paths> - import ROMs and media"
+msgstr "<路径> - 导入 ROM 与媒体"
+
+#: src/cli/cmds.c:242
+#, c-format
+msgid "cannot load platform rules: %s\n"
+msgstr "无法加载平台规则：%s\n"
+
+#: src/cli/cmds.c:255
+#, c-format
+msgid "at least one file or directory is required\n"
+msgstr "至少需要一个文件或目录\n"
+
+#: src/cli/cmds.c:269
+#, c-format
+msgid "import failed: %s\n"
+msgstr "导入失败：%s\n"
+
+#: src/cli/cmds.c:276
+#, c-format
+msgid "planned %d: imported %d, media %d, skipped %d, failed %d (job %s)\n"
+msgstr "计划 %d：已导入 %d，媒体 %d，跳过 %d，失败 %d（任务 %s）\n"
+
+#: src/cli/cmds.c:299
+#, c-format
+msgid "usage: rom-hamster dat import <platform> <file.dat>\n"
+msgstr "用法: rom-hamster dat import <平台> <文件.dat>\n"
+
+#: src/cli/cmds.c:309
+#, c-format
+msgid "DAT import failed: %s\n"
+msgstr "DAT 导入失败：%s\n"
+
+#: src/cli/cmds.c:312
+#, c-format
+msgid "DAT indexed: %s -> %s\n"
+msgstr "DAT 已索引：%s -> %s\n"
+
+#: src/cli/cmds.c:341
+#, c-format
+msgid "id\tname\tplatform\tyear\tgenre\trating\n"
+msgstr "id\t名称\t平台\t年份\t类型\t评分\n"
+
+#: src/cli/cmds.c:365
+msgid "Platform id"
+msgstr "平台 ID"
+
+#: src/cli/cmds.c:365 src/cli/cmds.c:752 src/cli/cmds.c:754 src/cli/cmds.c:756
+msgid "ID"
+msgstr "ID"
+
+#: src/cli/cmds.c:367 src/cli/cmds.c:615 src/gui/detail-pane.c:913
+#: src/gui/main.c:204
+msgid "Genre"
+msgstr "类型"
+
+#: src/cli/cmds.c:367
+msgid "GENRE"
+msgstr "类型"
+
+#: src/cli/cmds.c:369 src/cli/cmds.c:611 src/gui/detail-pane.c:914
+msgid "Developer"
+msgstr "开发商"
+
+#: src/cli/cmds.c:369
+msgid "DEV"
+msgstr "开发商"
+
+#: src/cli/cmds.c:371 src/cli/cmds.c:613 src/gui/detail-pane.c:915
+msgid "Publisher"
+msgstr "发行商"
+
+#: src/cli/cmds.c:371
+msgid "PUB"
+msgstr "发行商"
+
+#: src/cli/cmds.c:373 src/cli/cmds.c:617 src/gui/detail-pane.c:916
+msgid "Region"
+msgstr "区域"
+
+#: src/cli/cmds.c:373
+msgid "REGION"
+msgstr "区域"
+
+#: src/cli/cmds.c:375 src/cli/cmds.c:621
+msgid "Patch type"
+msgstr "补丁类型"
+
+#: src/cli/cmds.c:375
+msgid "TYPE"
+msgstr "类型"
+
+#: src/cli/cmds.c:377
+msgid "Earliest year"
+msgstr "最早年份"
+
+#: src/cli/cmds.c:377 src/cli/cmds.c:379 src/cli/cmds.c:623
+msgid "YEAR"
+msgstr "年份"
+
+#: src/cli/cmds.c:379
+msgid "Latest year"
+msgstr "最晚年份"
+
+#: src/cli/cmds.c:381 src/cli/cmds.c:619
+msgid "ROM status"
+msgstr "ROM 状态"
+
+#: src/cli/cmds.c:381
+msgid "STATUS"
+msgstr "状态"
+
+#: src/cli/cmds.c:383
+msgid "ROM format"
+msgstr "ROM 格式"
+
+#: src/cli/cmds.c:383
+msgid "FMT"
+msgstr "格式"
+
+#: src/cli/cmds.c:385 src/cli/cmds.c:629
+msgid "Tag (repeatable)"
+msgstr "标签（可重复）"
+
+#: src/cli/cmds.c:385 src/cli/cmds.c:629
+msgid "TAG"
+msgstr "标签"
+
+#: src/cli/cmds.c:387
+msgid "Keyword (FTS)"
+msgstr "关键词（FTS）"
+
+#: src/cli/cmds.c:387 src/cli/cmds.c:466
+msgid "WORD"
+msgstr "关键词"
+
+#: src/cli/cmds.c:389
+msgid "Only multi-disc games"
+msgstr "仅多碟游戏"
+
+#: src/cli/cmds.c:391
+msgid "Only single-disc games"
+msgstr "仅单碟游戏"
+
+#: src/cli/cmds.c:393
+msgid "Only patched games"
+msgstr "仅有补丁的游戏"
+
+#: src/cli/cmds.c:395
+msgid "Only unpatched games"
+msgstr "仅无补丁的游戏"
+
+#: src/cli/cmds.c:397
+msgid "Sort: name/rating/year/discs"
+msgstr "排序：name/rating/year/discs"
+
+#: src/cli/cmds.c:397
+msgid "KEY"
+msgstr "键"
+
+#: src/cli/cmds.c:399
+msgid "Descending order"
+msgstr "降序"
+
+#: src/cli/cmds.c:402
+msgid "- list games"
+msgstr "- 列出游戏"
+
+#: src/cli/cmds.c:409
+msgid "usage: rom-hamster list [options]"
+msgstr "用法: rom-hamster list [选项]"
+
+#: src/cli/cmds.c:416
+#, c-format
+msgid "--multi and --single are mutually exclusive\n"
+msgstr "--multi 与 --single 不能同时使用\n"
+
+#: src/cli/cmds.c:421
+#, c-format
+msgid "--has-patch and --no-patch are mutually exclusive\n"
+msgstr "--has-patch 与 --no-patch 不能同时使用\n"
+
+#: src/cli/cmds.c:446
+#, c-format
+msgid "query failed: %s\n"
+msgstr "查询失败：%s\n"
+
+#: src/cli/cmds.c:450 src/cli/cmds.c:497
+#, c-format
+msgid "%u game\n"
+msgid_plural "%u games\n"
+msgstr[0] "%u 个游戏\n"
+
+#: src/cli/cmds.c:466
+msgid "Keyword"
+msgstr "关键词"
+
+#: src/cli/cmds.c:469
+msgid "<keyword> - search games"
+msgstr "<关键词> - 搜索游戏"
+
+#: src/cli/cmds.c:476
+msgid "usage: rom-hamster search <keyword>"
+msgstr "用法: rom-hamster search <关键词>"
+
+#: src/cli/cmds.c:493
+#, c-format
+msgid "search failed: %s\n"
+msgstr "搜索失败：%s\n"
+
+#: src/cli/cmds.c:510 src/gui/detail-pane.c:929
+msgid "yes"
+msgstr "是"
+
+#: src/cli/cmds.c:510 src/gui/detail-pane.c:929
+msgid "no"
+msgstr "否"
+
+#: src/cli/cmds.c:516
+msgid "<game-id> - show game detail"
+msgstr "<游戏 ID> - 显示游戏详情"
+
+#: src/cli/cmds.c:530
+#, c-format
+msgid "usage: rom-hamster show <game-id>\n"
+msgstr "用法: rom-hamster show <游戏 ID>\n"
+
+#: src/cli/cmds.c:545
+#, c-format
+msgid "show failed: %s\n"
+msgstr "显示失败：%s\n"
+
+#: src/cli/cmds.c:549
+#, c-format
+msgid "id:          %s\n"
+msgstr "ID:          %s\n"
+
+#: src/cli/cmds.c:550
+#, c-format
+msgid "name:        %s\n"
+msgstr "名称:        %s\n"
+
+#: src/cli/cmds.c:552
+#, c-format
+msgid "main name:   %s\n"
+msgstr "主名称:      %s\n"
+
+#: src/cli/cmds.c:553
+#, c-format
+msgid "platform:    %s\n"
+msgstr "平台:        %s\n"
+
+#: src/cli/cmds.c:554
+#, c-format
+msgid "directory:   %s\n"
+msgstr "目录:        %s\n"
+
+#: src/cli/cmds.c:555
+#, c-format
+msgid "developer:   %s\n"
+msgstr "开发商:      %s\n"
+
+#: src/cli/cmds.c:556
+#, c-format
+msgid "publisher:   %s\n"
+msgstr "发行商:      %s\n"
+
+#: src/cli/cmds.c:557
+#, c-format
+msgid "year:        %d\n"
+msgstr "年份:        %d\n"
+
+#: src/cli/cmds.c:558
+#, c-format
+msgid "genre:       %s\n"
+msgstr "类型:        %s\n"
+
+#: src/cli/cmds.c:559
+#, c-format
+msgid "players:     %d\n"
+msgstr "玩家人数:    %d\n"
+
+#: src/cli/cmds.c:561
+#, c-format
+msgid "rating:      %.2f\n"
+msgstr "评分:        %.2f\n"
+
+#: src/cli/cmds.c:563
+#, c-format
+msgid "rating:      unset\n"
+msgstr "评分:        未设置\n"
+
+#: src/cli/cmds.c:564
+#, c-format
+msgid "region:      %s\n"
+msgstr "区域:        %s\n"
+
+#: src/cli/cmds.c:565
+#, c-format
+msgid "multi-disc:  %s\n"
+msgstr "多碟:        %s\n"
+
+#: src/cli/cmds.c:566
+#, c-format
+msgid "arcade:      %s\n"
+msgstr "街机:        %s\n"
+
+#: src/cli/cmds.c:567
+#, c-format
+msgid "rom format:  %s\n"
+msgstr "ROM 格式:    %s\n"
+
+#: src/cli/cmds.c:568
+#, c-format
+msgid "rom status:  %s\n"
+msgstr "ROM 状态:    %s\n"
+
+#: src/cli/cmds.c:569
+#, c-format
+msgid "dat source:  %s\n"
+msgstr "DAT 来源:    %s\n"
+
+#: src/cli/cmds.c:570
+#, c-format
+msgid "patch type:  %s\n"
+msgstr "补丁类型:    %s\n"
+
+#: src/cli/cmds.c:572
+#, c-format
+msgid ""
+"description:\n"
+"%s\n"
+msgstr "描述:\n%s\n"
+
+#: src/cli/cmds.c:576
+#, c-format
+msgid ""
+"\n"
+"%s (%u):\n"
+msgstr "\n%s（%u）:\n"
+
+#: src/cli/cmds.c:580
+msgid "ok"
+msgstr "正常"
+
+#: src/cli/cmds.c:580
+msgid "missing"
+msgstr "缺失"
+
+#: src/cli/cmds.c:605
+msgid "Display name"
+msgstr "显示名称"
+
+#: src/cli/cmds.c:605 src/cli/cmds.c:607 src/cli/cmds.c:609 src/cli/cmds.c:611
+#: src/cli/cmds.c:613 src/cli/cmds.c:615 src/cli/cmds.c:617 src/cli/cmds.c:619
+#: src/cli/cmds.c:621
+msgid "TEXT"
+msgstr "文本"
+
+#: src/cli/cmds.c:607
+msgid "Main name"
+msgstr "主名称"
+
+#: src/cli/cmds.c:609 src/gui/detail-pane.c:376
+msgid "Description"
+msgstr "描述"
+
+#: src/cli/cmds.c:623
+msgid "Release year"
+msgstr "发行年份"
+
+#: src/cli/cmds.c:625 src/gui/detail-pane.c:920
+msgid "Players"
+msgstr "玩家人数"
+
+#: src/cli/cmds.c:625
+msgid "N"
+msgstr "N"
+
+#: src/cli/cmds.c:627
+msgid "Rating 0.0-1.0"
+msgstr "评分 0.0-1.0"
+
+#: src/cli/cmds.c:627
+msgid "R"
+msgstr "R"
+
+#: src/cli/cmds.c:631
+msgid "Clear all tags"
+msgstr "清除所有标签"
+
+#: src/cli/cmds.c:634
+msgid "<game-id> - edit metadata"
+msgstr "<游戏 ID> - 编辑元数据"
+
+#: src/cli/cmds.c:640
+msgid "usage: rom-hamster edit <game-id> [options]"
+msgstr "用法: rom-hamster edit <游戏 ID> [选项]"
+
+#: src/cli/cmds.c:647
+#, c-format
+msgid "--tag and --clear-tags are mutually exclusive\n"
+msgstr "--tag 与 --clear-tags 不能同时使用\n"
+
+#: src/cli/cmds.c:678
+#, c-format
+msgid "edit failed: %s\n"
+msgstr "编辑失败：%s\n"
+
+#: src/cli/cmds.c:681
+#, c-format
+msgid "updated %s\n"
+msgstr "已更新 %s\n"
+
+#: src/cli/cmds.c:696
+msgid "Delete game directory too"
+msgstr "同时删除游戏目录"
+
+#: src/cli/cmds.c:698
+msgid "Confirm deletion"
+msgstr "确认删除"
+
+#: src/cli/cmds.c:701
+msgid "<game-id> - delete game"
+msgstr "<游戏 ID> - 删除游戏"
+
+#: src/cli/cmds.c:706
+msgid "usage: rom-hamster delete <game-id> [-f] -y"
+msgstr "用法: rom-hamster delete <游戏 ID> [-f] -y"
+
+#: src/cli/cmds.c:713
+#, c-format
+msgid "refusing to delete without --yes\n"
+msgstr "未指定 --yes，拒绝删除\n"
+
+#: src/cli/cmds.c:728
+#, c-format
+msgid "delete failed: %s\n"
+msgstr "删除失败：%s\n"
+
+#: src/cli/cmds.c:731
+#, c-format
+msgid "deleted %s (with files)\n"
+msgstr "已删除 %s（含文件）\n"
+
+#: src/cli/cmds.c:733
+#, c-format
+msgid "deleted %s\n"
+msgstr "已删除 %s\n"
+
+#: src/cli/cmds.c:752
+msgid "Frontend: es/esde/pegasus or path"
+msgstr "前端：es/esde/pegasus 或路径"
+
+#: src/cli/cmds.c:754
+msgid "Platform (repeatable)"
+msgstr "平台（可重复）"
+
+#: src/cli/cmds.c:756
+msgid "Game id (repeatable)"
+msgstr "游戏 ID（可重复）"
+
+#: src/cli/cmds.c:758
+msgid "Export all media"
+msgstr "导出全部媒体"
+
+#: src/cli/cmds.c:760
+msgid "Export covers"
+msgstr "导出封面"
+
+#: src/cli/cmds.c:762
+msgid "Export screenshots"
+msgstr "导出截图"
+
+#: src/cli/cmds.c:764
+msgid "Export videos"
+msgstr "导出视频"
+
+#: src/cli/cmds.c:766
+msgid "Export marquees"
+msgstr "导出标题图"
+
+#: src/cli/cmds.c:768
+msgid "Export miximages"
+msgstr "导出混合图"
+
+#: src/cli/cmds.c:770
+msgid "Export intro texts"
+msgstr "导出说明文本"
+
+#: src/cli/cmds.c:772
+msgid "Export patches"
+msgstr "导出补丁"
+
+#: src/cli/cmds.c:774
+msgid "Do not generate m3u"
+msgstr "不生成 m3u"
+
+#: src/cli/cmds.c:776
+msgid "Compressed ROM export (M3: unsupported)"
+msgstr "压缩 ROM 导出（M3：不支持）"
+
+#: src/cli/cmds.c:779
+msgid "<dest-dir> - export to a frontend"
+msgstr "<目标目录> - 导出到前端"
+
+#: src/cli/cmds.c:790
+msgid "usage: rom-hamster export <dest-dir> [--frontend es|esde|pegasus]"
+msgstr "用法: rom-hamster export <目标目录> [--frontend es|esde|pegasus]"
+
+#: src/cli/cmds.c:800 src/cli/cmds.c:811
+#, c-format
+msgid "frontend error: %s\n"
+msgstr "前端错误：%s\n"
+
+#: src/cli/cmds.c:862
+#, c-format
+msgid "export failed: %s\n"
+msgstr "导出失败：%s\n"
+
+#: src/cli/cmds.c:867
+#, c-format
+msgid "exported %s games, %s roms, %s media; skipped %s -> %s\n"
+msgstr "已导出 %s 个游戏、%s 个 ROM、%s 个媒体；跳过 %s -> %s\n"
+
+#: src/cli/cmds.c:892
+msgid "- library statistics"
+msgstr "- 库统计"
+
+#: src/cli/cmds.c:915
+#, c-format
+msgid "stats failed: %s\n"
+msgstr "统计失败：%s\n"
+
+#: src/cli/cmds.c:921
+#, c-format
+msgid "games:       %s\n"
+msgstr "游戏:        %s\n"
+
+#: src/cli/cmds.c:923
+#, c-format
+msgid "platforms:   %s\n"
+msgstr "平台:        %s\n"
+
+#: src/cli/cmds.c:925
+#, c-format
+msgid "roms:        %s\n"
+msgstr "ROM:         %s\n"
+
+#: src/cli/cmds.c:927
+#, c-format
+msgid "media files: %s\n"
+msgstr "媒体文件:    %s\n"
+
+#: src/cli/cmds.c:929
+#, c-format
+msgid "media bytes: %s\n"
+msgstr "媒体字节:    %s\n"
+
+#: src/cli/cmds.c:931
+#, c-format
+msgid "dat entries: %s\n"
+msgstr "DAT 条目:    %s\n"
+
+#: src/cli/cmds.c:933
+#, c-format
+msgid ""
+"\n"
+"platform\tgames\tmedia bytes\n"
+msgstr "\n平台\t游戏\t媒体字节\n"
+
+#: src/cli/main.c:34
+#, c-format
+msgid "maintainer: %s <%s>\n"
+msgstr "维护者: %s <%s>\n"
+
+#: src/cli/main.c:35
+#, c-format
+msgid "homepage: %s\n"
+msgstr "主页: %s\n"
+
+#: src/cli/main.c:36
+#, c-format
+msgid "license: %s\n"
+msgstr "许可证: %s\n"
+
+#: src/cli/main.c:37
+#, c-format
+msgid "schema: v%d\n"
+msgstr "数据库版本: v%d\n"
+
+#: src/cli/main.c:69
+#, c-format
+msgid "usage: rom-hamster config --explain <KEY> | --list\n"
+msgstr "用法: rom-hamster config --explain <键> | --list\n"
+
+#: src/cli/main.c:84
+msgid "Print version and maintainer information"
+msgstr "显示版本与维护者信息"
+
+#: src/cli/main.c:88
+msgid "<command> — ROM collection manager"
+msgstr "<命令> — ROM 收藏管理器"
+
+#: src/cli/main.c:112
+#, c-format
+msgid "usage: rom-hamster <command>  (try --help)\n"
+msgstr "用法: rom-hamster <命令>（试试 --help）\n"
+
+#: src/cli/main.c:147
+#, c-format
+msgid "unknown command: %s\n"
+msgstr "未知命令：%s\n"
+
+#: src/cli/ui-cli.c:38 src/cli/ui-cli.c:40
+msgid "working"
+msgstr "处理中"
+
+#: src/cli/ui-cli.c:50
+msgid "Y/n"
+msgstr "Y/n"
+
+#: src/cli/ui-cli.c:50
+msgid "y/N"
+msgstr "y/N"
+
+#: src/cli/ui-cli.c:69
+#, c-format
+msgid "select [1-%d, empty = cancel]: "
+msgstr "选择 [1-%d，留空 = 取消]: "
+
+#: src/cli/ui-cli.c:105
+msgid "password"
+msgstr "密码"
+
+#: src/gui/detail-pane.c:388
+msgid "No description."
+msgstr "暂无描述。"
+
+#: src/gui/detail-pane.c:426
+#, c-format
+msgid "%s (missing)"
+msgstr "%s（缺失）"
+
+#: src/gui/detail-pane.c:433 src/gui/detail-pane.c:667
+msgid "No files in this group."
+msgstr "此分组没有文件。"
+
+#: src/gui/detail-pane.c:506
+#, c-format
+msgid "Inline playback unavailable: %s Use \"Open externally\" instead."
+msgstr "无法内嵌播放：%s 请改用“在外部打开”。"
+
+#: src/gui/detail-pane.c:507
+msgid "media backend error."
+msgstr "媒体后端错误。"
+
+#: src/gui/detail-pane.c:531
+msgid "Inline playback ready."
+msgstr "内嵌播放已就绪。"
+
+#: src/gui/detail-pane.c:575
+msgid "No videos."
+msgstr "没有视频。"
+
+#: src/gui/detail-pane.c:585
+msgid "Open externally"
+msgstr "在外部打开"
+
+#: src/gui/detail-pane.c:587
+msgid ""
+"Inline playback needs the system media backend; use Open externally if it "
+"fails."
+msgstr "内嵌播放需要系统媒体后端；若失败，请使用“在外部打开”。"
+
+#: src/gui/detail-pane.c:600
+msgid "No inline media backend; use Open externally."
+msgstr "没有可用的内嵌媒体后端；请使用“在外部打开”。"
+
+#: src/gui/detail-pane.c:610
+msgid "File is missing; use Open externally."
+msgstr "文件缺失；请使用“在外部打开”。"
+
+#: src/gui/detail-pane.c:676
+msgid "  (missing)"
+msgstr "  （缺失）"
+
+#: src/gui/detail-pane.c:699
+msgid "ROM"
+msgstr "ROM"
+
+#: src/gui/detail-pane.c:700
+msgid "Covers"
+msgstr "封面"
+
+#: src/gui/detail-pane.c:701
+msgid "Screenshots"
+msgstr "截图"
+
+#: src/gui/detail-pane.c:702
+msgid "Videos"
+msgstr "视频"
+
+#: src/gui/detail-pane.c:703
+msgid "Marquees"
+msgstr "标题图"
+
+#: src/gui/detail-pane.c:704
+msgid "Miximages"
+msgstr "混合图"
+
+#: src/gui/detail-pane.c:705
+msgid "Manuals"
+msgstr "说明书"
+
+#: src/gui/detail-pane.c:706
+msgid "Patches"
+msgstr "补丁"
+
+#: src/gui/detail-pane.c:890
+msgid "Detail unavailable"
+msgstr "详情不可用"
+
+#: src/gui/detail-pane.c:891
+msgid "Error"
+msgstr "错误"
+
+#: src/gui/detail-pane.c:907 src/gui/main.c:202
+msgid "Platform"
+msgstr "平台"
+
+#: src/gui/detail-pane.c:911 src/gui/main.c:203
+msgid "Year"
+msgstr "年份"
+
+#: src/gui/detail-pane.c:925 src/gui/main.c:205
+msgid "Rating"
+msgstr "评分"
+
+#: src/gui/detail-pane.c:927
+msgid "Status"
+msgstr "状态"
+
+#: src/gui/detail-pane.c:928
+msgid "Format"
+msgstr "格式"
+
+#: src/gui/detail-pane.c:929
+msgid "Multi-disc"
+msgstr "多碟"
+
+#: src/gui/detail-pane.c:930
+msgid "Patch"
+msgstr "补丁"
+
+#: src/gui/detail-pane.c:931
+msgid "DAT"
+msgstr "DAT"
+
+#: src/gui/detail-pane.c:932
+msgid "Directory"
+msgstr "目录"
+
+#: src/gui/main.c:201
+msgid "Name"
+msgstr "名称"
+
+#: src/gui/main.c:228
+#, c-format
+msgid "Query failed: %s"
+msgstr "查询失败：%s"
+
+#: src/gui/main.c:235 src/gui/main.c:291 src/gui/main.c:324
+#, c-format
+msgid "%u game"
+msgid_plural "%u games"
+msgstr[0] "%u 个游戏"
+
+#: src/gui/main.c:306
+#, c-format
+msgid "Showing %s"
+msgstr "正在显示 %s"
+
+#: src/gui/main.c:340
+#, c-format
+msgid "Cannot save configuration: %s"
+msgstr "无法保存配置：%s"
+
+#: src/gui/main.c:348
+msgid "Cannot resolve database path"
+msgstr "无法解析数据库路径"
+
+#: src/gui/main.c:354
+#, c-format
+msgid "Cannot open library: %s"
+msgstr "无法打开库：%s"
+
+#: src/gui/main.c:424
+#, c-format
+msgid "Importing: %s"
+msgstr "正在导入：%s"
+
+#: src/gui/main.c:514
+msgid "Cancelling import…"
+msgstr "正在取消导入…"
+
+#: src/gui/main.c:565
+msgid "Import failed: no result"
+msgstr "导入失败：没有结果"
+
+#: src/gui/main.c:568
+msgid "Import cancelled"
+msgstr "导入已取消"
+
+#: src/gui/main.c:570
+msgid "Import cancelled (before start)"
+msgstr "导入已取消（尚未开始）"
+
+#: src/gui/main.c:572
+#, c-format
+msgid "Import failed: %s"
+msgstr "导入失败：%s"
+
+#: src/gui/main.c:574
+#, c-format
+msgid "Imported %d ROM + %d media, skipped %d, failed %d"
+msgstr "已导入 %d 个 ROM + %d 个媒体，跳过 %d，失败 %d"
+
+#: src/gui/main.c:578
+msgid "Import finished"
+msgstr "导入完成"
+
+#: src/gui/main.c:636
+msgid "Scanning…"
+msgstr "正在扫描…"
+
+#: src/gui/main.c:641
+#, c-format
+msgid "Scanning %s"
+msgstr "正在扫描 %s"
+
+#: src/gui/main.c:643
+#, c-format
+msgid "Scanning %u item"
+msgid_plural "Scanning %u items"
+msgstr[0] "正在扫描 %u 项"
+
+#: src/gui/main.c:699
+msgid "No local files to import"
+msgstr "没有可导入的本地文件"
+
+#: src/gui/main.c:781 src/gui/main.c:820
+#, c-format
+msgid "Cannot choose folder: %s"
+msgstr "无法选择文件夹：%s"
+
+#: src/gui/main.c:801
+msgid "Import games or a folder"
+msgstr "导入游戏或文件夹"
+
+#: src/gui/main.c:833
+msgid "Library could not be opened. See the status bar."
+msgstr "无法打开库，请查看状态栏。"
+
+#: src/gui/main.c:851
+msgid "Choose ROM library folder"
+msgstr "选择 ROM 库文件夹"
+
+#: src/gui/main.c:1129
+msgid "Cancel the running import before closing"
+msgstr "关闭前请先取消正在运行的导入"
+
+#: src/gui/main.c:1174
+msgid "Detail"
+msgstr "详情"
+
+#: src/gui/ui/detail-pane.ui:14
+msgid "Back"
+msgstr "返回"
+
+#: src/gui/ui/detail-pane.ui:15
+msgid "Back to the game list"
+msgstr "返回游戏列表"
+
+#: src/gui/ui/main-window.ui:20
+msgid "Refresh"
+msgstr "刷新"
+
+#: src/gui/ui/main-window.ui:21
+msgid "Reload the library list"
+msgstr "重新加载库列表"
+
+#: src/gui/ui/main-window.ui:26
+msgid "Import"
+msgstr "导入"
+
+#: src/gui/ui/main-window.ui:27
+msgid "Import a file or folder into the library"
+msgstr "将文件或文件夹导入库"
+
+#: src/gui/ui/main-window.ui:32
+msgid "Cancel"
+msgstr "取消"
+
+#: src/gui/ui/main-window.ui:34
+msgid "Cancel the running import"
+msgstr "取消正在运行的导入"
+
+#: src/gui/ui/main-window.ui:41
+msgid "Search name, genre, publisher…"
+msgstr "搜索名称、类型、发行商…"
+
+#: src/gui/ui/main-window.ui:70
+msgid ""
+"No games in this library yet.\n"
+"Drop ROM files or a folder here to import."
+msgstr "这个库还没有游戏。\n把 ROM 文件或文件夹拖到这里即可导入。"
+
+#: src/gui/ui/main-window.ui:78
+msgid "Use Import to add a folder to this library."
+msgstr "使用“导入”向这个库添加文件夹。"

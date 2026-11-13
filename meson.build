@@ -5,6 +5,17 @@ project('rom-hamster', 'c',
   default_options : ['c_std=c11', 'warning_level=2', 'werror=false'])
 
 # ---------------------------------------------------------------------------
+# i18n（ARCHITECTURE §11）：msgid 用英文，翻译域沿用项目名。
+# 运行时可用 TEXTDOMAINDIR 覆盖 LOCALEDIR，便于直接从构建目录验证 .mo。
+# ---------------------------------------------------------------------------
+i18n = import('i18n')
+
+add_project_arguments(
+  '-DGETTEXT_PACKAGE="@0@"'.format(meson.project_name()),
+  '-DLOCALEDIR="@0@"'.format(join_paths(get_option('prefix'), get_option('localedir'))),
+  language : 'c')
+
+# ---------------------------------------------------------------------------
 # 依赖：核心库只允许这五个 .so（见 ARCHITECTURE §8.2）
 # ---------------------------------------------------------------------------
 glib_dep      = dependency('glib-2.0',      version : '>=2.66')
@@ -143,6 +154,11 @@ if get_option('gui')
   install_data('data/io.github.goddog312.romhamster.metainfo.xml',
     install_dir : join_paths(get_option('datadir'), 'metainfo'))
 endif
+
+# ---------------------------------------------------------------------------
+# 翻译（M5）：po/ 下只有两个前端真正需要翻译的源文件
+# ---------------------------------------------------------------------------
+subdir('po')
 
 dirs_conf = configuration_data()
 dirs_conf.set('DATADIR', join_paths(get_option('prefix'), datadir_rh))

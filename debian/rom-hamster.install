@@ -1,5 +1,6 @@
 usr/bin/rom-hamster
 usr/lib/*/rom-hamster/libromham-1.0.so
 usr/share/man/man1/rom-hamster.1
+usr/share/locale/*/LC_MESSAGES/rom-hamster.mo
 debian/tmp/etc/rom-hamster/platforms.conf
 debian/tmp/etc/rom-hamster/rom-hamster.conf
