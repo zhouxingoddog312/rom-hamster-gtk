@@ -25,6 +25,9 @@ _research/
 # 翻译模板由 `meson compile -C build-gui rom-hamster-pot` 生成
 po/*.pot
 
+# CI 矩阵使用独立构建目录（tools/ci-matrix.sh）
+build-ci-*/
+
 # M5 截图中间产物：XWD 原始 dump 与窗口列表只用于本地排障，成品 PNG 才入库
 data/screenshots/*.xwd
 data/screenshots/windows.txt
