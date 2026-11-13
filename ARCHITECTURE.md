@@ -108,8 +108,8 @@ c与gtk/
 │  │  ├─ esde.conf            #   [export.*] 排版模板 + [import] 字段映射
 │  │  └─ pegasus.conf
 │  ├─ rom-hamster.conf.template
-│  ├─ io.github.goddog312.RomHamster.desktop
-│  ├─ io.github.goddog312.RomHamster.metainfo.xml
+│  ├─ io.github.goddog312.romhamster.desktop
+│  ├─ io.github.goddog312.romhamster.metainfo.xml
 │  ├─ rom-hamster.svg  +  icons/{16,32,48,256}/rom-hamster.png
 │  └─ rom-hamster.1
 ├─ src/
@@ -1052,7 +1052,7 @@ ROM_ROOT = /home/zhoux/roms
 
 | 项 | 要求 |
 |---|---|
-| 应用生命周期 | `GtkApplication`，`APPLICATION_ID=io.github.goddog312.RomHamster`，`G_APPLICATION_HANDLES_OPEN`：第二次启动不新开进程，改为激活已有窗口并接收参数 |
+| 应用生命周期 | `GtkApplication`，`APPLICATION_ID=io.github.goddog312.romhamster`（全小写，同时是 AppStream 组件 ID、`.desktop` 文件名与 X11 `WM_CLASS`，靠 `g_set_prgname()` 对齐），`G_APPLICATION_HANDLES_OPEN`：第二次启动不新开进程，改为激活已有窗口并接收参数 |
 | 界面构建 | `.ui` + `GResource` 编译进二进制；不手写控件树；明暗主题跟随系统 |
 | 详情页（媒体同窗） | 元数据 `GtkGrid` + 8 类资源分页（`GtkStackSwitcher`：ROM文件/封面/截图/视频/横幅/合成图/说明/补丁），与游戏目录的 8 个子目录一一对应。图片经 `GdkPixbuf` 异步加载、按控件尺寸缩放、磁盘缩略图缓存（键 = 路径+mtime+尺寸，目录 `$XDG_CACHE_HOME/rom-hamster/thumbs/`）；视频用 `GtkVideo` 内嵌播放，无媒体后端时降级外部打开；说明文本用只读 `GtkTextView` 显示原文（**不解析 Markdown**）。由此 `render_detail.py` 与 `python3` 依赖整体消失 |
 | 图标与元数据 | 多尺寸图标（沿用 1.0.0 的 `rom-hamster.svg` 与 png 套件）、`.desktop`（`Exec=rom-hamster-gui`）、AppStream metainfo（含截图与发布说明）、man page |

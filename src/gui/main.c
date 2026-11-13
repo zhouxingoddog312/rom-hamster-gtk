@@ -23,6 +23,11 @@
 #include "rh-version.h"
 #include "store.h"
 
+/* 应用 ID 的唯一出处：同时作为 GtkApplication 的 application_id、AppStream 组件
+ * ID、.desktop 文件名与 X11 的 WM_CLASS（见 data/io.github.goddog312.romhamster.*）。
+ * AppStream 要求组件 ID 只含小写，别改成 CamelCase。 */
+#define RH_GUI_APP_ID "io.github.goddog312.romhamster"
+
 typedef struct {
   gboolean running;
   gboolean cancel_requested;
@@ -874,6 +879,13 @@ static gboolean perf_quit(gpointer data)
   return G_SOURCE_REMOVE;
 }
 
+/* 冒烟脚本要抓窗口截图，需要窗口保持存活一段时间；RH_SMOKE_HOLD_MS 只推迟退出。 */
+static gboolean smoke_hold_done(gpointer data)
+{
+  g_printerr("smoke: hold finished\n");
+  return perf_quit(data);
+}
+
 static void perf_scroll_stop(Gui *g)
 {
   guint n = P.frame_gaps ? P.frame_gaps->len : 0;
@@ -1084,6 +1096,10 @@ static void on_window_map(GtkWidget *widget, gpointer data)
     g_timeout_add(2500, smoke_detail_done, g);
     return;
   }
+  if (g_getenv("RH_SMOKE_HOLD_MS")) {
+    g_timeout_add((guint) atoi(g_getenv("RH_SMOKE_HOLD_MS")), smoke_hold_done, g);
+    return;
+  }
   g_application_quit(G_APPLICATION(g->app));
 }
 
@@ -1102,7 +1118,7 @@ static gboolean on_close_request(GtkWindow *win, gpointer data)
 static void create_window(Gui *g)
 {
   GtkBuilder *b = gtk_builder_new_from_resource(
-    "/io/github/goddog312/RomHamster/ui/main-window.ui");
+    "/io/github/goddog312/romhamster/ui/main-window.ui");
   GtkButton *btn_rescan;
 
   g->win = GTK_WINDOW(gtk_builder_get_object(b, "win"));
@@ -1186,11 +1202,16 @@ int main(int argc, char **argv)
 
   setlocale(LC_ALL, "");
 
+  /* g_get_prgname 默认取 argv[0]（rom-hamster-gui），X11 的 WM_CLASS 由它决定。
+   * 显式设成应用 ID，.desktop 的 StartupWMClass 才能对上（Wayland 下 GTK 本来就用
+   * application_id 作为 app_id，这里只是把两条路径对齐）。 */
+  g_set_prgname(RH_GUI_APP_ID);
+
 #if GLIB_CHECK_VERSION(2, 74, 0)
-  app = gtk_application_new("io.github.goddog312.RomHamster",
+  app = gtk_application_new(RH_GUI_APP_ID,
                             G_APPLICATION_DEFAULT_FLAGS);
 #else
-  app = gtk_application_new("io.github.goddog312.RomHamster",
+  app = gtk_application_new(RH_GUI_APP_ID,
                             G_APPLICATION_FLAGS_NONE);
 #endif
 

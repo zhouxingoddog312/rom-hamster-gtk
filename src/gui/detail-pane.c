@@ -718,7 +718,7 @@ static void clear_stack(GtkStack *stack)
 
 GtkWidget *detail_pane_new(RhCtx *ctx)
 {
-  const char *path = "/io/github/goddog312/RomHamster/ui/detail-pane.ui";
+  const char *path = "/io/github/goddog312/romhamster/ui/detail-pane.ui";
   GError *err = NULL;
   GBytes *bytes = g_resources_lookup_data(path, 0, &err);
   GtkBuilder *b;
