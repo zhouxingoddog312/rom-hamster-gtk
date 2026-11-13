@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.goddog312.romhamster</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>rom-hamster</name>
+  <summary>Collect, organize and package retro game ROMs</summary>
+  <developer id="io.github.goddog312">
+    <name>Zhou Xin</name>
+  </developer>
+  <description>
+    <p>
+      rom-hamster keeps a retro game ROM collection in a local SQLite library. It
+      detects platforms from file extensions, imports single ROMs and archives,
+      groups multi-disc games and verifies DAT entries.
+    </p>
+    <p>It also exports library metadata for EmulationStation, ES-DE and Pegasus.</p>
+    <p>The application does not launch games or download content by itself.</p>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Library list with platform, year and disc count</caption>
+      <image type="source">https://gitee.com/goddog312/rom-hamster-gtk/raw/master/data/screenshots/rom-hamster-main.png</image>
+    </screenshot>
+  </screenshots>
+  <launchable type="desktop-id">io.github.goddog312.romhamster.desktop</launchable>
+  <icon type="stock">rom-hamster</icon>
+  <categories>
+    <category>Utility</category>
+    <category>Game</category>
+  </categories>
+  <keywords>
+    <keyword>ROM</keyword>
+    <keyword>retro</keyword>
+    <keyword>game</keyword>
+    <keyword>emulator</keyword>
+    <keyword>library</keyword>
+  </keywords>
+  <url type="homepage">https://gitee.com/goddog312/rom-hamster-gtk</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-12">
+      <description>
+        <p>First GTK 4 desktop release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

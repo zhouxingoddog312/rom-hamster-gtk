@@ -1,2 +1,6 @@
 usr/bin/rom-hamster-gui
 usr/share/man/man1/rom-hamster-gui.1
+usr/share/applications/io.github.goddog312.romhamster.desktop
+usr/share/metainfo/io.github.goddog312.romhamster.metainfo.xml
+usr/share/icons/hicolor/*/apps/rom-hamster.png
+usr/share/icons/hicolor/scalable/apps/rom-hamster.svg

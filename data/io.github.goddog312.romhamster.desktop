@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=rom-hamster
+GenericName=ROM Library Manager
+Comment=Collect, organize and package retro game ROMs
+Exec=rom-hamster-gui
+Icon=rom-hamster
+Terminal=false
+Categories=Utility;Game;
+Keywords=ROM;retro;game;emulator;library;
+StartupNotify=true
+StartupWMClass=io.github.goddog312.romhamster

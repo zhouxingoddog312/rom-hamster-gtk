@@ -121,6 +121,29 @@ if get_option('gui')
   install_man('man/rom-hamster-gui.1')
 endif
 
+# ---------------------------------------------------------------------------
+# 桌面集成（M5）：图标、.desktop、AppStream metainfo —— 都随 rom-hamster-gui 包
+# 发布（ARCHITECTURE §9.1）。应用 ID 见 src/gui/main.c 的 RH_GUI_APP_ID。
+# ---------------------------------------------------------------------------
+if get_option('gui')
+  hicolor_dir = join_paths(get_option('datadir'), 'icons', 'hicolor')
+
+  install_data('data/rom-hamster.svg',
+    install_dir : join_paths(hicolor_dir, 'scalable', 'apps'))
+  install_data('data/icons/16/rom-hamster.png',
+    install_dir : join_paths(hicolor_dir, '16x16', 'apps'))
+  install_data('data/icons/32/rom-hamster.png',
+    install_dir : join_paths(hicolor_dir, '32x32', 'apps'))
+  install_data('data/icons/48/rom-hamster.png',
+    install_dir : join_paths(hicolor_dir, '48x48', 'apps'))
+  install_data('data/icons/256/rom-hamster.png',
+    install_dir : join_paths(hicolor_dir, '256x256', 'apps'))
+  install_data('data/io.github.goddog312.romhamster.desktop',
+    install_dir : join_paths(get_option('datadir'), 'applications'))
+  install_data('data/io.github.goddog312.romhamster.metainfo.xml',
+    install_dir : join_paths(get_option('datadir'), 'metainfo'))
+endif
+
 dirs_conf = configuration_data()
 dirs_conf.set('DATADIR', join_paths(get_option('prefix'), datadir_rh))
 dirs_conf.set('SYSCONFDIR', join_paths(get_option('sysconfdir'), 'rom-hamster'))
