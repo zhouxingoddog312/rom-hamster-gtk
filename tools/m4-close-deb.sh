@@ -8,9 +8,12 @@ mkdir -p "$STAGE/rom-hamster"
 tar cf - \
   --exclude=build --exclude=build-nogui --exclude=build-asan \
   --exclude=build-gui --exclude=build-gui-asan \
+  --exclude='obj-*' \
   --exclude=.git --exclude=_research --exclude=dist --exclude=debian/tmp \
   . 2>/dev/null | tar xf - -C "$STAGE/rom-hamster"
-find "$STAGE/rom-hamster" -type f -exec sed -i 's/\r//' {} +
+# 只对文本文件去 CR：staging 在 /mnt/c 上会带 CRLF。二进制（png/xwd/ogv）过 sed 会被改坏。
+find "$STAGE/rom-hamster" -type f ! -name '*.png' ! -name '*.xwd' ! -name '*.ogv' \
+  -exec sed -i 's/\r//' {} +
 find "$STAGE/rom-hamster" -type f -exec chmod 644 {} +
 chmod 755 "$STAGE/rom-hamster/debian/rules"
 (cd "$STAGE/rom-hamster" && dpkg-buildpackage -b -uc -us >"$STAGE/deb.log" 2>&1)

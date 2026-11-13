@@ -28,8 +28,10 @@ override_dh_makeshlibs:
 
 # libromham 是私有 soname（不进 ldconfig），dpkg-shlibdeps 无法从全局 shlibs
 # 推出依赖；GUI 已显式 Depends: rom-hamster (= ${binary:Version})，这里跳过推断。
+# 新版 dpkg-shlibdeps 对“库根本找不到”仍报错（--ignore-missing-info 只兜住
+# 缺 shlibs 信息），所以再用 -l 指向本包自己的私有库目录。
 override_dh_shlibdeps:
-	dh_shlibdeps -- --ignore-missing-info
+	dh_shlibdeps -- -l$(CURDIR)/debian/rom-hamster/usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)/rom-hamster --ignore-missing-info
 
 # 单测依赖源码树里的 data/ 与临时目录，不适合在打包环境跑；
 # 单元测试在开发机上由 tools/m1-check.sh 执行。
