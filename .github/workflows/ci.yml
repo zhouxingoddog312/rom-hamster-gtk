@@ -93,8 +93,25 @@ jobs:
       - name: Verify installed binary and catalog
         run: |
           rom-hamster --version || { echo "::error::rom-hamster --version failed"; exit 1; }
-          test -f /usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo \
-            || { echo "::error::zh_CN catalog missing"; find /usr/share/locale -name 'rom-hamster.mo' 2>/dev/null; exit 1; }
+          if test -f /usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo; then
+            echo "zh_CN catalog present"
+            exit 0
+          fi
+          # 日志需 admin 才能下载，这里把判定所需的证据逐段打印成注解。
+          deb=$(ls "$HOME"/.cache/romham-m4/close-stage/rom-hamster_*.deb | head -1)
+          {
+            echo "== dpkg -L rom-hamster (locale/mo) =="
+            dpkg -L rom-hamster 2>&1 | grep -iE 'locale|\.mo' || echo "(none)"
+            echo "== dpkg-deb -c $(basename "$deb") (locale/mo) =="
+            dpkg-deb -c "$deb" 2>&1 | grep -iE 'locale|\.mo' || echo "(none)"
+            echo "== ls /usr/share/locale/zh_CN/LC_MESSAGES =="
+            ls -l /usr/share/locale/zh_CN/LC_MESSAGES 2>&1 || echo "(missing)"
+            echo "== dpkg excludes =="
+            cat /etc/dpkg/dpkg.cfg.d/* 2>/dev/null || echo "(none)"
+          } > /tmp/rh-diag.txt
+          cat /tmp/rh-diag.txt
+          echo "::error::zh_CN catalog missing: $(tr '\n' '|' < /tmp/rh-diag.txt | cut -c1-900)"
+          exit 1
 
       - name: Purge packages
         run: |
