@@ -2,7 +2,7 @@
 # 建 M3 验收夹具：3 个 NES 单碟，导入后写入元数据、媒体与一个双碟标记。
 set -u
 cd "$(dirname "$0")/.." || exit 1
-BIN=./build/rom-hamster
+BIN="${RH_BIN:-./build/rom-hamster}"
 ROOT="$HOME/.cache/romham-m3/check"
 
 rm -rf "$ROOT"

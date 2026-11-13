@@ -1,0 +1,86 @@
+name: CI
+
+# Gitee 是主仓库，这个工作流跑在 GitHub 镜像上：push 到 master 或发起 PR 都会触发。
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  matrix:
+    name: ${{ matrix.distro }} / ${{ matrix.config }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.distro }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # ARCHITECTURE §8.4 的三组构建；发行版按 §14 的 M5 验收口径。
+        distro: ["ubuntu:24.04", "debian:13"]
+        config: [gui, nogui, asan]
+    steps:
+      - name: Prepare container
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config gettext python3 \
+            libglib2.0-dev libsqlite3-dev libarchive-dev libxml2-dev zlib1g-dev \
+            libgtk-4-dev xvfb xauth x11-utils fonts-dejavu-core
+
+      - name: Run ${{ matrix.config }} leg
+        run: bash tools/ci-matrix.sh ${{ matrix.config }}
+
+  package:
+    name: ${{ matrix.distro }} / package
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.distro }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ["ubuntu:24.04", "debian:13"]
+    steps:
+      - name: Prepare container
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Install packaging dependencies
+        run: |
+          apt-get install -y --no-install-recommends \
+            build-essential debhelper dpkg-dev lintian meson ninja-build \
+            pkg-config gettext libglib2.0-dev libsqlite3-dev libarchive-dev \
+            libxml2-dev zlib1g-dev libgtk-4-dev
+
+      - name: Build packages
+        run: bash tools/m4-close-deb.sh
+
+      - name: Lint packages
+        run: |
+          cd "$HOME/.cache/romham-m4/close-stage"
+          lintian rom-hamster_*.deb rom-hamster-gui_*.deb rom-hamster-data_*.deb
+
+      - name: Install and purge packages
+        run: |
+          cd "$HOME/.cache/romham-m4/close-stage"
+          dpkg -i rom-hamster-data_*.deb
+          dpkg -i rom-hamster_*.deb
+          dpkg -i rom-hamster-gui_*.deb
+          rom-hamster --version
+          test -f /usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo
+          dpkg -P rom-hamster-gui rom-hamster rom-hamster-data
+          ! dpkg -s rom-hamster >/dev/null 2>&1

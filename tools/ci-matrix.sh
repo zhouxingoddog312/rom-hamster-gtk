@@ -106,7 +106,10 @@ gui_smoke() {
     bad "xvfb-run missing (GUI smoke is part of the matrix)"
     return
   fi
-  bash tools/m3-fixture.sh >/dev/null 2>&1
+  if ! RH_BIN="$PWD/build-ci-gui/rom-hamster" bash tools/m3-fixture.sh >/dev/null 2>&1; then
+    bad "fixture setup for gui smoke"
+    return
+  fi
   rm -rf "$cfg"
   if ! XDG_CONFIG_HOME="$cfg" RH_SMOKE_TEST=1 RH_SMOKE_ROOT="$lib" \
        RH_SMOKE_EXPECT_ROWS=3 xvfb-run -a build-ci-gui/rom-hamster-gui \
