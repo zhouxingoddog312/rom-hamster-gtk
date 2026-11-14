@@ -39,9 +39,16 @@
   <url type="homepage">https://gitee.com/goddog312/rom-hamster-gtk</url>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0" date="2026-11-12">
+    <release version="0.1.0" date="2026-11-14">
       <description>
-        <p>First GTK 4 desktop release.</p>
+        <p>First stable release.</p>
+        <ul>
+          <li>Platform detection for 101 systems with layered rules.</li>
+          <li>ROM, archive, media and DAT import with cancel and crash resume.</li>
+          <li>Library search with 13 filters, 4 sort orders and detail pages.</li>
+          <li>Exports for EmulationStation, ES-DE and Pegasus.</li>
+          <li>GTK 4 front-end with drag-and-drop import and video preview.</li>
+        </ul>
       </description>
     </release>
   </releases>

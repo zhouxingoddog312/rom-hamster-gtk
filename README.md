@@ -10,19 +10,20 @@
 
 ## 当前状态
 
-**M5 打包与发布已完成**（2026-11-14，tag `v0.1.0-M5`）。M1 起每个里程碑都有
-可安装 deb；M5 收口包括：AppStream metainfo（含真实截图，`appstreamcli validate`
-通过）、完整 gettext（`zh_CN` 目录 + GTK `.ui` 翻译）、GitHub Actions 上的
-CI 矩阵（`{gui, nogui, asan} × {ubuntu:24.04, debian:13}`，另有两个发行版的
-打包 / lintian / `dpkg -i` / `dpkg -P` 验证）、lintian 无 error/warning。
-Gitee 为主仓库，GitHub 为镜像，两处 `master` 与 tag 保持同步。
+**v0.1.0 正式发行版**（2026-11-14）。M1–M5 全部收口：平台规则、导入、
+检索/管理/导出、GTK4 前端、打包与发布。发行说明与产物清单见
+`docs/release-notes-0.1.0.md`。
 
-M2 导入、M3 检索/管理/导出、M4 GUI 的验收记录分别在 `docs/m2-verification.md`、
-`docs/m3-verification.md`、`docs/m4-verification.md`；M5 逐项对照 §14 的结果
-（含未覆盖项）见 `docs/m5-verification.md`。
+- 单元测试 5 套件、M1/M2/M3 验收脚本、GUI 与导入/拖拽检查全绿；
+- ASan/UBSan 构建与 CI 矩阵 `{gui, nogui, asan} × {ubuntu:24.04, debian:13}`
+  全部通过（GitHub Actions run `43594845896`，8/8）；
+- 两个发行版的打包 job 均完成 lintian → `dpkg -i` → CLI/zh_CN catalog 校验
+  → conffile 升级保留 → `dpkg -P` 无残留；
+- 发行包按发行版分三套：Ubuntu 24.04、Ubuntu 26.04、Debian 13，
+  依赖差异见发行说明。
 
-里程碑进度见 `ARCHITECTURE.md` §14：M1 存储与规则（含首个可安装 deb）→ M2 导入 →
-M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
+历史验收记录：`docs/m1-verification.md` 到 `docs/m5-verification.md`。
+里程碑口径见 `ARCHITECTURE.md` §14。
 
 ## 文档
 
@@ -36,6 +37,7 @@ M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
 | `docs/m3-verification.md` | M3 验收记录：检索 / 管理 / 导出与模板加载期报错 |
 | `docs/m4-verification.md` | M4 验收记录：首次运行、主窗口、详情页与性能指标 |
 | `docs/m5-verification.md` | M5 验收记录：打包、gettext、CI 矩阵、安装验证，含未覆盖项 |
+| `docs/release-notes-0.1.0.md` | v0.1.0 发行说明：功能概览、三套 deb 的依赖差异与验证来源 |
 | `data/platforms.conf` | 101 个平台规则（5 段：扩展名/街机后缀/媒体目录/媒体后缀/归档后缀） |
 | `data/frontends/es.conf` | EmulationStation（RetroPie）导入 + 导出规格 |
 | `data/frontends/es-de.conf` | ES-DE 导入 + 导出规格 |
@@ -75,13 +77,18 @@ tools/m1-check.sh
 SKIP_DEB=1 tools/m1-check.sh
 ```
 
-打包（产出三个 deb，落在 `dist/`）：
+打包（产出三个 deb）：
 
 ```sh
 dpkg-buildpackage -us -uc -b
 # rom-hamster_0.1.0_amd64.deb / rom-hamster-gui_0.1.0_amd64.deb / rom-hamster-data_0.1.0_all.deb
-sudo dpkg -i dist/*.deb
+sudo dpkg -i rom-hamster-data_0.1.0_all.deb rom-hamster_0.1.0_amd64.deb rom-hamster-gui_0.1.0_amd64.deb
 ```
+
+> 在哪个发行版上构建，就只能在哪个发行版（及更新的同族发行版）上安装：
+> libxml2 在 24.04 是 `libxml2`（soname 2），在 26.04 / Debian 13 是
+> `libxml2-16`。v0.1.0 的 release 因此提供 Ubuntu 24.04、Ubuntu 26.04、
+> Debian 13 三套 deb，详见 `docs/release-notes-0.1.0.md`。
 
 `debian/rules` 是 Debian 强制要求的 make 入口，内部只调 `dh --buildsystem=meson`；
 工程本身仍是 Meson + Ninja，没有自维护 Makefile。

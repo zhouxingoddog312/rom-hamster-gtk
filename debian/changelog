@@ -1,16 +1,27 @@
 rom-hamster (0.1.0) unstable; urgency=medium
 
-  * M1: storage and rules milestone.
-  * store_*: full game/ROM/media/tag/DAT/job API on SQLite schema v1,
-    transactional writes, cascading deletes, FTS5 keyword search with
-    LIKE fallback when the trigram tokenizer is unavailable.
-  * platform.c: compile platforms.conf into pre-built structures
-    (101 platforms plus the arcade suffix, media directory, media suffix
-    and archive extension sections); ambiguous extensions are reported
-    as a candidate set instead of being silently resolved.
-  * Packaging: three binary packages (rom-hamster, rom-hamster-gui,
-    rom-hamster-data), conffiles under /etc/rom-hamster, private library
-    directory /usr/lib/<triplet>/rom-hamster with rpath on both binaries,
-    manual page for the command line front-end.
+  * First stable release; feature-complete for the M1-M5 scope.
+  * Platforms: 101 platform rules across five sections (extensions, arcade
+    suffixes, media directories, media suffixes, archive extensions), with
+    factory / system / user layering and config --explain source tracing.
+  * Import: single ROMs, zip/7z/rar/tar archives, side media and DAT files;
+    two-phase planning, cancel, crash resume, ambiguous-extension prompts,
+    multi-disc grouping and duplicate detection.
+  * Library: SQLite schema v1 with transactional writes, FTS5 search with a
+    LIKE fallback, 13 filter dimensions, 4 sort orders, and a detail view
+    with eight media groups and cached thumbnails.
+  * Export: EmulationStation, ES-DE and Pegasus manifests generated from
+    versioned templates.
+  * CLI: init, import, dat, list, search, show, edit, delete, export, stats,
+    config, help and version.
+  * GUI: GTK 4 list and detail panes, drag-and-drop import, progress with
+    cancellation, video preview through the media backend and explicit
+    degradation when no backend is available.
+  * i18n: English msgids with a complete Simplified Chinese catalog.
+  * Packaging: rom-hamster, rom-hamster-gui and rom-hamster-data; conffiles
+    under /etc/rom-hamster; private library directory; AppStream metadata;
+    man pages; lintian clean.
+  * CI: {gui, nogui, asan} x {ubuntu:24.04, debian:13} builds, plus package
+    install, conffile upgrade and purge verification on both distributions.
 
- -- Zhou Xin <zhouxin312@qq.com>  Wed, 11 Nov 2026 12:00:00 +0800
+ -- Zhou Xin <zhouxin312@qq.com>  Sat, 14 Nov 2026 22:00:00 +0800
