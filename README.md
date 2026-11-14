@@ -10,11 +10,16 @@
 
 ## 当前状态
 
-**M2 导入已完成**（2026-11-11）：`classify` / `rh-archive` / `rh-hash` / `dat` /
-`job` / `import` / `library` 七个模块 + CLI `init` / `import` / `dat` 已落地；
-两阶段导入、六级压缩包分流、多碟 + m3u + DAT 匹配、整库导入（ES / Pegasus）、
-`kill -9` 后幂等续做全部实机通过。验收 29 项全过（rar 因无压缩器 SKIP），
-M1 回归 9/9。明细见 `docs/m2-verification.md`，一键复跑 `tools/m2-check.sh`。
+**M5 打包与发布已完成**（2026-11-14，tag `v0.1.0-M5`）。M1 起每个里程碑都有
+可安装 deb；M5 收口包括：AppStream metainfo（含真实截图，`appstreamcli validate`
+通过）、完整 gettext（`zh_CN` 目录 + GTK `.ui` 翻译）、GitHub Actions 上的
+CI 矩阵（`{gui, nogui, asan} × {ubuntu:24.04, debian:13}`，另有两个发行版的
+打包 / lintian / `dpkg -i` / `dpkg -P` 验证）、lintian 无 error/warning。
+Gitee 为主仓库，GitHub 为镜像，两处 `master` 与 tag 保持同步。
+
+M2 导入、M3 检索/管理/导出、M4 GUI 的验收记录分别在 `docs/m2-verification.md`、
+`docs/m3-verification.md`、`docs/m4-verification.md`；M5 逐项对照 §14 的结果
+（含未覆盖项）见 `docs/m5-verification.md`。
 
 里程碑进度见 `ARCHITECTURE.md` §14：M1 存储与规则（含首个可安装 deb）→ M2 导入 →
 M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
@@ -28,6 +33,9 @@ M3 检索/管理/导出 → M4 GUI → M5 打包与发布。
 | `docs/m0-verification.md` | M0 验收记录：环境、结果、与文档的偏差 |
 | `docs/m1-verification.md` | M1 验收记录：14 项证据、与 `ARCHITECTURE.md` 的 6 处偏差及理由、修掉的 8 个真实缺陷 |
 | `docs/m2-verification.md` | M2 验收记录：29 项证据、修掉的 17 个真实缺陷、未闭环清单 |
+| `docs/m3-verification.md` | M3 验收记录：检索 / 管理 / 导出与模板加载期报错 |
+| `docs/m4-verification.md` | M4 验收记录：首次运行、主窗口、详情页与性能指标 |
+| `docs/m5-verification.md` | M5 验收记录：打包、gettext、CI 矩阵、安装验证，含未覆盖项 |
 | `data/platforms.conf` | 101 个平台规则（5 段：扩展名/街机后缀/媒体目录/媒体后缀/归档后缀） |
 | `data/frontends/es.conf` | EmulationStation（RetroPie）导入 + 导出规格 |
 | `data/frontends/es-de.conf` | ES-DE 导入 + 导出规格 |
