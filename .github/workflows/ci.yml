@@ -51,6 +51,8 @@ jobs:
       fail-fast: false
       matrix:
         distro: ["ubuntu:24.04", "debian:13"]
+    env:
+      DISTRO_SLUG: ${{ matrix.distro == 'ubuntu:24.04' && 'ubuntu-24.04' || 'debian-13' }}
     steps:
       - name: Prepare container
         run: |
@@ -83,6 +85,18 @@ jobs:
 
       - name: Build packages
         run: bash tools/m4-close-deb.sh
+
+      - name: Stage package files for download
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cp "$HOME"/.cache/romham-m4/close-stage/*.deb "$GITHUB_WORKSPACE/artifacts/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ env.DISTRO_SLUG }}
+          path: artifacts/*.deb
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Lint packages
         run: |
