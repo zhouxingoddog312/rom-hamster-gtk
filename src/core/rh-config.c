@@ -138,6 +138,19 @@ int rh_config_get_int(RhConfig *c, const char *key, int fallback)
  *   [default] / key = value / # 与 ; 注释 / 空行
  * 其他段落的键一律忽略（1.0.0 也只读 [default]）。
  */
+
+/* 1.0.0 的配置文件是 shell 赋值风格（ROM_ROOT="/srv/roms"），§10 要求
+ * 旧配置可直接使用：成对的单/双引号是引用语法，不是值的一部分。
+ * 只有首尾引号相同才剥离；不成对时按字面值保留。 */
+static gchar *unquote_value(const gchar *val)
+{
+  gsize n = strlen(val);
+
+  if (n >= 2 && (val[0] == '"' || val[0] == '\'') && val[n - 1] == val[0])
+    return g_strndup(val + 1, n - 2);
+  return g_strdup(val);
+}
+
 RhErr rh_config_load_file(RhConfig *c, RhLayer layer, const char *path)
 {
   gchar **lines;
@@ -182,9 +195,12 @@ RhErr rh_config_load_file(RhConfig *c, RhLayer layer, const char *path)
 
     {
       gchar *key = g_strndup(line, (gsize) (eq - line));
-      gchar *val = g_strdup(eq + 1);
+      gchar *raw = g_strdup(eq + 1);
+      gchar *val;
       g_strstrip(key);
-      g_strstrip(val);
+      g_strstrip(raw);
+      val = unquote_value(raw);
+      g_free(raw);
       if (*key == '\0') {
         g_free(key);
         g_free(val);

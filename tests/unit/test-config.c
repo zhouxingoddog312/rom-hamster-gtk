@@ -85,6 +85,35 @@ static void test_groups_and_defaults(void)
   rh_config_free(c);
 }
 
+/* 1.0.0 的 shell 风格配置（KEY="value"）必须能直接读：引号不算值的一部分 */
+static void test_quoted_values(void)
+{
+  RhConfig *c = rh_config_new();
+  gchar *p = write_conf("quoted.conf",
+                        "[default]\n"
+                        "ROM_ROOT=\"\"\n"
+                        "dat_dir='/srv/dats'\n"
+                        "dat_match_hash = \"crc32\"\n"
+                        "disc_label_prefix = \"Disc\"\n"
+                        "emulator_launch = \"retroarch -L core.so\"\n"
+                        "auto_delete_source = true\n"
+                        "store_path = \"unterminated\n");
+  RhErr e = rh_config_load_file(c, RH_LAYER_SYSTEM, p);
+
+  g_assert_true(rh_err_ok(&e));
+  g_assert_cmpstr(rh_config_get(c, "ROM_ROOT"), ==, "");
+  g_assert_cmpstr(rh_config_get(c, "dat_dir"), ==, "/srv/dats");
+  g_assert_cmpstr(rh_config_get(c, "dat_match_hash"), ==, "crc32");
+  g_assert_cmpstr(rh_config_get(c, "disc_label_prefix"), ==, "Disc");
+  g_assert_cmpstr(rh_config_get(c, "emulator_launch"), ==, "retroarch -L core.so");
+  g_assert_true(rh_config_get_bool(c, "auto_delete_source"));
+  /* 引号不成对时按字面值保留，不做猜测 */
+  g_assert_cmpstr(rh_config_get(c, "store_path"), ==, "\"unterminated");
+
+  g_free(p);
+  rh_config_free(c);
+}
+
 /* 语法错误必须报出文件名与行号，不能静默 */
 static void test_parse_error(void)
 {
@@ -157,6 +186,7 @@ int main(int argc, char **argv)
   g_test_add_func("/config/precedence", test_precedence);
   g_test_add_func("/config/missing-file", test_missing_file);
   g_test_add_func("/config/groups-defaults", test_groups_and_defaults);
+  g_test_add_func("/config/quoted-values", test_quoted_values);
   g_test_add_func("/config/parse-error", test_parse_error);
   g_test_add_func("/config/save-user-key", test_save_user_key);
 
