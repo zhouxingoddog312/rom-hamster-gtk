@@ -86,9 +86,10 @@ sudo dpkg -i rom-hamster-data_0.1.0_all.deb rom-hamster_0.1.0_amd64.deb rom-hams
 ```
 
 > 在哪个发行版上构建，就只能在哪个发行版（及更新的同族发行版）上安装：
-> libxml2 在 24.04 是 `libxml2`（soname 2），在 26.04 / Debian 13 是
-> `libxml2-16`。v0.1.0 的 release 因此提供 Ubuntu 24.04、Ubuntu 26.04、
-> Debian 13 三套 deb，详见 `docs/release-notes-0.1.0.md`。
+> libxml2 在 Ubuntu 24.04 与 Debian 13 是 `libxml2`（soname 2），
+> 在 Ubuntu 26.04 是 `libxml2-16`（soname 16）。v0.1.0 的 release 因此提供
+> Ubuntu 24.04、Ubuntu 26.04、Debian 13 三套 deb，详见
+> `docs/release-notes-0.1.0.md`。
 
 `debian/rules` 是 Debian 强制要求的 make 入口，内部只调 `dh --buildsystem=meson`；
 工程本身仍是 Meson + Ninja，没有自维护 Makefile。

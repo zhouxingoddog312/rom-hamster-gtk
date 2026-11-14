@@ -73,14 +73,15 @@ rom-hamster 是一个本地优先的复古游戏 ROM 库管理器。核心库
 
 ## 发行产物
 
-Linux 发行版的 libxml2 包名在 24.04 → 26.04 / Debian 13 之间发生了 soname
-变化，同一个 deb 无法同时满足两端，因此本版按发行版提供三套：
+Linux 发行版的 libxml2 包在 Ubuntu 26.04 上升级为 `libxml2-16`（soname 16），
+而 Ubuntu 24.04 与 Debian 13 仍是 `libxml2`（soname 2），同一个 deb 无法同时
+满足两端，因此本版按发行版提供三套：
 
 | 适用系统 | 附件 | 关键依赖 | 验证来源 |
 |---|---|---|---|
 | Ubuntu 24.04 LTS | `rom-hamster-0.1.0-ubuntu-24.04-debs.tar.xz` | `libxml2`（2.9.14，soname 2） | CI 内真实 `dpkg -i` → CLI/zh_CN → conffile 升级 → `dpkg -P` |
-| Ubuntu 26.04 | `rom-hamster-0.1.0-ubuntu-26.04-debs.tar.xz` | `libxml2-16`（soname 16） | 本机构建 + `dpkg --root` 安装 + 包内 CLI/GUI 冒烟 |
-| Debian 13 | `rom-hamster-0.1.0-debian-13-debs.tar.xz` | `libxml2-16`（soname 16） | CI 内真实 `dpkg -i` → CLI/zh_CN → conffile 升级 → `dpkg -P` |
+| Ubuntu 26.04 | `rom-hamster-0.1.0-ubuntu-26.04-debs.tar.xz` | `libxml2-16`（2.15.2，soname 16） | 本机构建 + `dpkg --root` 安装 + 包内 CLI/GUI 冒烟 |
+| Debian 13 | `rom-hamster-0.1.0-debian-13-debs.tar.xz` | `libxml2`（2.12.7+dfsg+really2.9.14，soname 2） | CI 内真实 `dpkg -i` → CLI/zh_CN → conffile 升级 → `dpkg -P` |
 
 三套都包含 `rom-hamster`、`rom-hamster-gui`、`rom-hamster-data` 三个包；
 压缩包内的 `README.txt` 写明适用系统与安装顺序。源码包为
