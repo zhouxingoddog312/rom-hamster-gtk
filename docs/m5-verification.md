@@ -22,7 +22,7 @@
 |---|---|---|---|---|
 | 1 | `dpkg -i` 后 CLI 与 GUI 均可运行 | PASS | CI 打包 job 装三个 deb 后跑 `rom-hamster --version`；本地解包 payload 后 xvfb 启动 GUI | `rom-hamster 0.1.0`；GUI `smoke: detail pages=8`，rc=0 |
 | 2 | `dpkg -P` 干净卸载无残留 | PASS | CI 打包 job：`dpkg -P rom-hamster-gui rom-hamster rom-hamster-data` 后 `dpkg -s rom-hamster` 必须失败 | run `43443788150` 的 `Purge packages` 步骤成功 |
-| 3 | 升级时 conffile 保留管理员修改 | **未覆盖** | 见 §5.1：只确认了 conffile 已登记，没有做双版本升级实测 | `dpkg-deb -e` 的 `conffiles` 含 `/etc/rom-hamster/platforms.conf`、`/etc/rom-hamster/rom-hamster.conf` |
+| 3 | 升级时 conffile 保留管理员修改 | PASS | `tools/m5-conffile-check.sh`：在 dpkg 隔离 root 装 0.1.0 → 改 conffile → 装 0.1.1 → 比对 → purge | conffile md5 不变、管理员注释与取值都在、无 `.dpkg-dist`/`.dpkg-new`；见 §4.2 |
 | 4 | `appstreamcli validate` 通过 | PASS | `appstreamcli validate --no-net data/io.github.goddog312.romhamster.metainfo.xml` | `✔ Validation was successful.` |
 | 5 | 至少 Ubuntu 24.04 与 Debian 13 安装验证通过 | PASS | CI 两个发行版各跑一遍打包 → lintian → 安装 → 验证 → 卸载 | run `43443788150`：8 个 job 全成功 |
 | 6 | 完整 gettext | PASS | `msgfmt --check` 逐个校验、CI 的 i18n 步骤、安装后检查 `.mo` | `po/zh_CN.po` 226 条 msgid（含头部），`msgfmt --check` rc=0；装包后 `/usr/share/locale/zh_CN/LC_MESSAGES/rom-hamster.mo` 存在 |
@@ -86,7 +86,29 @@ M4 PACKAGE: ALL PASS
 `dpkg -i` / `dpkg -P` 段在本机 SKIP（非 root，且没有免交互 sudo），
 安装/卸载由 §3 的 CI 打包 job 覆盖。
 
-### 4.2 单测与构建
+### 4.2 conffile 升级保留与 purge 残留
+
+`tools/m5-conffile-check.sh` 用 `dpkg --root` 建隔离 root（不需要系统 root），
+装入 0.1.0 后修改 `/etc/rom-hamster/rom-hamster.conf`（追加管理员注释与
+`duplicate_check_threshold = 42`），再把同一份源码只改版本号构建成 0.1.1 覆盖安装：
+
+```
+PASS  dpkg -i 0.1.0
+PASS  dpkg -i upgrade to 0.1.1
+PASS  admin conffile byte-identical after upgrade
+PASS  admin comment preserved
+PASS  admin value preserved
+PASS  no dpkg-dist/new artifact
+PASS  dpkg status updated to 0.1.1
+PASS  dpkg -P rc=0
+PASS  no leftover installed files
+M5 CONFFILE: ALL PASS
+```
+
+CI 的打包 job 在卸载前执行同一脚本（`Conffile upgrade preserves admin edits`）。
+`--force-depends` 只用于隔离 root 里没有依赖库的场景，conffile 语义与真实安装一致。
+
+### 4.3 单测与构建
 
 - `meson test -C build`：5 个套件（config-layers / store-schema / platform-rules /
   str-fs-hash / store-crud）全过。
@@ -95,7 +117,7 @@ M4 PACKAGE: ALL PASS
 - `-Dgui=true`、`-Dgui=false`、`-Db_sanitize=address,undefined` 三组构建在 CI
   两个发行版上各跑一遍。
 
-### 4.3 仓库与 tag
+### 4.4 仓库与 tag
 
 - Gitee：`git@gitee.com:goddog312/rom-hamster-gtk.git`（`origin`，主仓库）
 - GitHub：`git@github.com:zhouxingoddog312/rom-hamster-gtk.git`（`github`，镜像）
@@ -104,21 +126,13 @@ M4 PACKAGE: ALL PASS
 
 ## 5. 未覆盖或降级的项
 
-### 5.1 conffile 升级保留（未执行）
-
-`/etc/rom-hamster/rom-hamster.conf` 与 `/etc/rom-hamster/platforms.conf` 已由
-dpkg 登记为 conffile（`dpkg-deb -e` 可查），语义上由 dpkg 负责保留管理员修改。
-但本阶段**没有**做“装 v1 → 改 conffile → 装 v2 → 检查修改仍在”的双版本实测：
-仓库目前只有一个版本号 `0.1.0`，构造第二个版本属于测试工程，未纳入本轮范围。
-在 M5 验收口径里这一项按**未覆盖**记，不按通过记。
-
-### 5.2 desktop entry 的 Categories 提示
+### 5.1 desktop entry 的 Categories 提示
 
 `desktop-file-validate` 返回 0，但给出一条 hint：
 `Categories` 同时含 `Utility` 与 `Game`，应用菜单里可能重复出现。
 这是 hint 不是 error，未改；如要消除，把 `Categories` 收成单一主类即可。
 
-### 5.3 其余沿用 M4 记录的边界
+### 5.2 其余沿用 M4 记录的边界
 
 - 真实 `GtkFileDialog` 的人机点选仍未自动化，冒烟用 `RH_SMOKE_ROOT` 走同一条
   `open_library()` 路径；文件对话框本身只做代码审查。
@@ -134,3 +148,16 @@ dpkg 登记为 conffile（`dpkg-deb -e` 可查），语义上由 dpkg 负责保�
 |---|---|---|---|
 | 1 | 配置解析不剥引号：1.0.0 的 `ROM_ROOT=""` 被读成两个字面引号 | 非空但非法的 `ROM_ROOT` 让 GUI 跳过首次运行引导，`open_library()` 失败，窗口 0 行；同理会破坏 `archive_extensions`、`dat_match_hash` 等带引号的值 | 加载时剥掉一对匹配的单/双引号，不成对则按字面保留；新增 `/config/quoted-values` 单测 |
 | 2 | `ubuntu:24.04` 镜像的 dpkg 配置丢弃 `/usr/share/locale/*/LC_MESSAGES/*.mo` | 安装验证看不到 zh_CN catalog，CI 打包 job 必失败 | 打包 job 安装前仅移除这一条 locale 排除规则，文档/手册裁剪保持原样 |
+
+## 7. 发布前（v0.1.0）回归补测
+
+正式发行前按 ARCHITECTURE §14 的口径把验收项重跑一遍，新增的修正：
+
+| # | 发现 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | conffile 升级保留没有实测（本文 §5.1 原记“未覆盖”） | 之前没有双版本安装的检查脚本 | 新增 `tools/m5-conffile-check.sh`（dpkg 隔离 root 装 0.1.0 → 改 conffile → 装 0.1.1 → purge），并接进 CI 打包 job；结果见 §4.2 |
+| 2 | `rom-hamster help` 报 `unknown command: help`，`version` 子命令也不存在 | CLI 分发表漏了 §9.3 规定的两个子命令，`--help` 也不列命令 | `main.c` 增加 `help` / `version` 分派与命令清单；`--help` 追加提示；新增 `cli_contract` 检查（`tools/ci-matrix.sh`）防回归 |
+| 3 | man page 仍写着“里程碑 M1”“只实现配置与存储层” | 手册停留在 M1，未随功能更新 | 按实际命令集重写 SYNOPSIS/COMMANDS，`man/rom-hamster.1` 日期与版本对齐 0.1.0 |
+
+其余复测结论（单测 5 套件、M1/M2/M3 回归、GUI 检查、ASan/UBSan、打包解包、gettext、
+AppStream、lintian）均为通过；外部条件限制见 §5.2。

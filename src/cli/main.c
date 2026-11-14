@@ -37,6 +37,29 @@ static void print_version(void)
   g_print(_("schema: v%d\n"), RH_SCHEMA_VERSION);
 }
 
+static void print_help(void)
+{
+  g_print("%s",
+          _("Usage: rom-hamster <command> [options]\n"
+            "\n"
+            "Commands:\n"
+            "  init      create a library and write the user configuration\n"
+            "  import    import ROMs, archives and media\n"
+            "  dat       import a DAT index (dat import <platform> <file>)\n"
+            "  list      list games\n"
+            "  search    search games by keyword\n"
+            "  show      show one game\n"
+            "  edit      edit metadata and tags\n"
+            "  delete    delete a game\n"
+            "  export    export front-end manifests\n"
+            "  stats     print library statistics\n"
+            "  config    show configuration values and their sources\n"
+            "  help      show this help\n"
+            "  version   print version information\n"
+            "\n"
+            "Run 'rom-hamster <command> --help' for command options.\n"));
+}
+
 static int cmd_config(RhConfig *cfg, int argc, char **argv)
 {
   if (argc >= 2 && g_strcmp0(argv[0], "--explain") == 0) {
@@ -91,6 +114,8 @@ int main(int argc, char **argv)
   g_option_context_set_help_enabled(opt, TRUE);
   g_option_context_set_translation_domain(opt, GETTEXT_PACKAGE);
   g_option_context_add_main_entries(opt, entries, GETTEXT_PACKAGE);
+  g_option_context_set_description(
+    opt, _("Run 'rom-hamster help' for the command list."));
   /* 遇到第一个非选项就停下，把子命令参数原样留给子命令 */
   g_option_context_set_strict_posix(opt, TRUE);
 
@@ -109,7 +134,7 @@ int main(int argc, char **argv)
   }
 
   if (argc < 2) {
-    g_printerr(_("usage: rom-hamster <command>  (try --help)\n"));
+    g_printerr(_("usage: rom-hamster <command>  (try 'rom-hamster help')\n"));
     return 2;
   }
 
@@ -143,6 +168,12 @@ int main(int argc, char **argv)
     rc = cmd_export(restc, rest);
   } else if (g_strcmp0(cmd, "stats") == 0) {
     rc = cmd_stats(restc, rest);
+  } else if (g_strcmp0(cmd, "help") == 0) {
+    print_help();
+    rc = 0;
+  } else if (g_strcmp0(cmd, "version") == 0) {
+    print_version();
+    rc = 0;
   } else {
     g_printerr(_("unknown command: %s\n"), cmd);
     rc = 2;

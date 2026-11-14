@@ -1,4 +1,4 @@
-.TH ROM-HAMSTER 1 "2026-11-11" "rom-hamster 0.1.0" "User Commands"
+.TH ROM-HAMSTER 1 "2026-11-14" "rom-hamster 0.1.0" "User Commands"
 .SH NAME
 rom-hamster \- 复古游戏 ROM 库管理器（命令行前端）
 .SH SYNOPSIS
@@ -6,8 +6,10 @@ rom-hamster \- 复古游戏 ROM 库管理器（命令行前端）
 [\fB\-\-version\fR]
 .br
 .B rom-hamster
-.B config
-[\fB\-\-explain\fR \fIKEY\fR | \fB\-\-list\fR]
+\fIcommand\fR [\fIoptions\fR]
+.br
+.B rom-hamster
+.B help
 .SH DESCRIPTION
 .B rom-hamster
 管理一个复古游戏 ROM 库：平台判定、导入、检索、导出到前端清单（ES、ES\-DE、
@@ -18,11 +20,62 @@ Pegasus），并支持 DAT 校验。库本身是一个 SQLite 文件，默认位
 .B rom-hamster-gui
 （独立包 rom-hamster-gui），两者共享核心库 libromham\-1.0.so。
 .PP
-当前版本（0.1.0，里程碑 M1）实现了配置系统与存储层；其余子命令在后续里程碑
-逐个加入，尚未实现时调用会给出明确报错，不会静默成功。
+不带参数运行时打印一行用法提示；命令写错时报
+.B unknown command
+并以状态码 2 退出。每个子命令都支持
+.B \-\-help
+查看自己的选项。
+.SH COMMANDS
+.TP
+.B init \-\-root \fIdir\fR [\-\-dat\-dir \fIdir\fR]
+创建目录、初始化库文件并写入用户配置。
+.TP
+.B import \fIpaths\fR... [\-\-yes] [\-\-dry\-run] [\-\-overwrite]
+两阶段导入 ROM、压缩包与媒体。\fB\-\-dry\-run\fR 只扫描不落盘；
+\fB\-\-yes\fR 对二义扩展名等交互取默认值。
+.TP
+.B dat import \fIplatform\fR \fIfile.dat\fR
+导入 Logiqx XML DAT 索引。
+.TP
+.B list [\fIoptions\fR]
+按平台、类型、厂商、发行、地区、年份、标签、多碟、补丁、格式、关键字等
+维度筛选并排序。完整选项见
+.B rom-hamster list \-\-help
+。
+.TP
+.B search \fIkeyword\fR
+按关键字检索。
+.TP
+.B show \fIgame\-id\fR
+显示单条游戏的元数据、ROM 与媒体。
+.TP
+.B edit \fIgame\-id\fR [\fIoptions\fR]
+修改显示名、描述、厂商、年份、评分、标签等字段。
+.TP
+.B delete \fIgame\-id\fR [\-f] \-y
+删除游戏记录；必须显式给
+.B \-y
+确认，
+.B \-f
+同时删除磁盘上的游戏目录。
+.TP
+.B export \fIdest\-dir\fR [\-\-frontend es|esde|pegasus] [\-\-platform \fIid\fR] [\-\-media]
+按前端规格导出清单文件。
+.TP
+.B stats
+打印库统计。
+.TP
+.B config [\-\-explain \fIKEY\fR | \-\-list]
+显示配置键的最终取值、来源文件与行号，或列出全部键。
+.TP
+.B help
+打印命令列表。
+.TP
+.B version
+打印版本、维护者、主页、许可与库 schema 版本。
 .SH OPTIONS
 .TP
-.B \-\-version
+.B \-V, \-\-version
 打印版本、维护者、主页、许可与库 schema 版本。
 .TP
 .B config \-\-explain \fIKEY\fR

@@ -141,6 +141,25 @@ run_gui() {
 run_nogui() {
   setup_build build-ci-nogui -Dgui=false -Dtests=true || return
   run_tests build-ci-nogui
+  cli_contract
+}
+
+cli_contract() {
+  local bin=build-ci-nogui/rom-hamster rc
+  local log="$LOG_DIR/rh-ci-cli-help.log"
+
+  if "$bin" help >"$log" 2>&1 && grep -q '^  init' "$log"; then
+    ok "cli help lists commands"
+  else
+    bad "cli help lists commands"
+    head -5 "$log"
+  fi
+  "$bin" version >/dev/null 2>&1 && ok "cli version subcommand" \
+    || bad "cli version subcommand"
+  "$bin" no-such-command >/dev/null 2>&1
+  rc=$?
+  [ "$rc" -eq 2 ] && ok "cli unknown command rc=2" \
+    || bad "cli unknown command rc=$rc"
 }
 
 run_asan() {

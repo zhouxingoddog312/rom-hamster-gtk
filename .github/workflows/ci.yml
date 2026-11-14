@@ -128,6 +128,9 @@ jobs:
           echo "::error::zh_CN catalog missing: $(tr '\n' '|' < /tmp/rh-diag.txt | cut -c1-900)"
           exit 1
 
+      - name: Conffile upgrade preserves admin edits
+        run: bash tools/m5-conffile-check.sh
+
       - name: Purge packages
         run: |
           if ! out=$(dpkg -P rom-hamster-gui rom-hamster rom-hamster-data 2>&1); then
